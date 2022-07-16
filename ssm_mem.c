@@ -2,6 +2,8 @@
 
 #include <stdint.h>
 
+/* Aligned Allocator */
+
 void* a_alloc(size_t size) {
   uintptr_t ptr = (uintptr_t)malloc(size + SZ_VAL);
   if((void*)ptr == NULL) return NULL;
