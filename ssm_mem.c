@@ -1,4 +1,5 @@
 #include "ssm_config.h"
+#include "ssm_alloc.h"
 #include "ssm_mem.h"
 
 #include <stdint.h>
@@ -46,17 +47,14 @@ static void fin_gc(mem_t *mem) {
   }
 }
 
-mem_t* new_mem() {
-  mem_t *mem = (mem_t*) malloc(sizeof(mem_t));
+void init_mem(mem_t *mem) {
   init_code_set(&mem->code_set);
   init_stack(mem);
   init_gc(mem);
-  return mem;
 }
 
-void del_mem(mem_t *mem) {
+void fin_mem(mem_t *mem) {
   fin_code_set(&mem->code_set);
   fin_stack(mem);
   fin_gc(mem);
-  free(mem);
 }

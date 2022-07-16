@@ -23,8 +23,8 @@ typedef struct mem {
   val_t *major_head;
 } mem_t;
 
-mem_t* new_mem();
-void del_mem(mem_t*);
+void init_mem(mem_t*);
+void fin_mem(mem_t*);
 
 /* Global Memory Helpers */
 
