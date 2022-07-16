@@ -5,4 +5,9 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#include "ssm_config.h"
+#include "ssm_val.h"
+#include "ssm_mem.h"
+#include "ssm_vm.h"
+
 #endif

@@ -118,7 +118,4 @@ typedef uptr_t hd_t;
 #define hd_color_l(h) (h & COLOR_L)
 #define hd_colorhl(h) (h & COLOR_H)
 
-/* OpCode */
-typedef int32_t op_t;
-
 #endif

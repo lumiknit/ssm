@@ -1,4 +1,8 @@
 #include "ssm_vm.h"
 
-void execute() {
+struct vm {
+  
+};
+
+void run_vm() {
 }
