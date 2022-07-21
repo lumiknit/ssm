@@ -9,15 +9,25 @@
 
 /* OpCode */
 typedef int32_t op_t;
+typedef int32_t op_int_t;
+typedef void* op_ptr_t;
 
 typedef enum opcode {
   OP_NOP = 0,
   OP_ACC_G,
   OP_JMP,
+  OP_ACC,
+  OP_ACC_0,
 } opcode_t;
 
-int is_opcode_with_global(opcode_t);
-int is_opcode_with_int(opcode_t);
+typedef enum opcode_param {
+  OP_P_NONE = 0,
+  OP_P_INT = 1,
+  OP_P_GLOBAL = 2,
+  OP_P_LABEL = 3,
+} opcode_param_t;
+
+opcode_param_t opcode_param_type(opcode_t);
 
 /* Code set
  * -- Structure
@@ -62,6 +72,8 @@ typedef struct code_set {
 
 void init_code_set(code_set_t*);
 void fin_code_set(code_set_t*);
+
+void* get_global_by_index(code_set_t*, uint32_t);
 
 int load_code(code_set_t*, size_t size, uint8_t *bytes);
 

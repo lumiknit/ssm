@@ -43,7 +43,7 @@ typedef iptr_t val_t;
 
 /* Val type checker */
 #define is_lit_val(x) ((x) & 1)
-#define is_tup_val(x) (!is_lit_val(x))
+#define is_obj_val(x) (!is_lit_val(x))
 
 /* Int <-> Val Conversion */
 #define val_to_int(x) ((iptr_t)(x)) >> 1)
@@ -51,15 +51,15 @@ typedef iptr_t val_t;
 
 /* Ptr <-> Val Conversion */
 #define val_to_ptr(x) ((void*)((uptr_t)(x) & ~(val_t)1))
-#define ptr_to_val(x) ((val_t)(i) | (val_t)1)
+#define ptr_to_val(p) ((val_t)(p) | (val_t)1)
 
 /* Flt <-> Val Conversion */
 #define val_to_flt(x) (((union vptr)(((val_t)(x)) & ~((val_t)1))).f)
-#define flt_to_val(f) (((union vptr)(f)).i | (val_t)1)
+#define flt_to_val(v) (((union vptr){ .f = v }).i | (val_t)1)
 
-/* Tup <-> Val Conversion */
-#define val_to_tup(x) ((val_t*)(x))
-#define tup_to_val(x) ((val_t*)(x))
+/* Obj <-> Val Conversion */
+#define val_to_obj(x) ((val_t*)(x))
+#define obj_to_val(x) ((val_t)(x))
 
 /* Header */
 typedef uptr_t hd_t;

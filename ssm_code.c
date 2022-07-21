@@ -4,24 +4,20 @@
 #include "ssm_code.h"
 
 #include <stdio.h>
+#include <string.h>
 
 /* OpCode */
 
-int is_opcode_with_global(opcode_t o) {
+opcode_param_t opcode_param_type(opcode_t o) {
   switch(o) {
+  case OP_ACC:
+    return OP_P_INT;
   case OP_ACC_G:
-    return 1;
-  default:
-    return 0;
-  }
-}
-
-int is_opcode_With_int(opcode_t o) {
-  switch(o) {
+    return OP_P_GLOBAL;
   case OP_JMP:
-    return 1;
+    return OP_P_LABEL;
   default:
-    return 0;
+    return OP_P_NONE;
   }
 }
 
@@ -43,6 +39,19 @@ void fin_code_set(code_set_t *set) {
   set->codes = NULL;
 }
 
+void* get_global_by_index(code_set_t *set, uint32_t idx) {
+  /* TODO: Change it to binary search */
+  int i;
+  for(i = 0; i < set->num_codes; i++) {
+    uint32_t fr = set->codes[i].off_global;
+    uint32_t to = fr + set->codes[i].num_globals;
+    if(fr <= idx && idx < to) {
+      return set->codes[i].globals + (idx - fr);
+    }
+  }
+  return NULL;
+}
+
 #define log_err(ret, ...) { fprintf(stderr, __VA_ARGS__); return (ret); }
 
 int load_code(code_set_t *set, size_t size, uint8_t *chunk) {
@@ -57,7 +66,7 @@ int load_code(code_set_t *set, size_t size, uint8_t *chunk) {
   }
 
   code_t *pc = NULL; /* Previous code */
-  if(set->num_codes > 0) pc = set->codes[set->num_codes - 1];
+  if(set->num_codes > 0) pc = &set->codes[set->num_codes - 1];
   code_t *cc = &set->codes[set->num_codes]; /* Current code */
 
   /* -- Read haheader -- */
@@ -113,10 +122,10 @@ int load_code(code_set_t *set, size_t size, uint8_t *chunk) {
   /* Scan pool size */
   size_t pool_size = 0;
   for(gp = hd_size; gp < hd_size + sz_global;) {
-    uint8_t kind = bytes[gp++];
+    uint8_t kind = chunk[gp++];
     switch(kind) {
     case 0x00: {
-      uint32_t size = *(uint32_t*)(bytes + gp);
+      uint32_t size = *(uint32_t*)(chunk + gp);
       gp += 4 + size;
       size = (size + SZ_VAL - 1) / SZ_VAL;
       pool_size += 1 + size;
@@ -138,24 +147,24 @@ int load_code(code_set_t *set, size_t size, uint8_t *chunk) {
     if(gi >= cc->num_globals) {
       log_err(-7, "Too many global elements!\n");
     }
-    uint8_t kind = bytes[gp++];
+    uint8_t kind = chunk[gp++];
     switch(kind) {
     case 0x00: { /* Bytes */
-      uint32_t size = *(uint32_t*)(bytes + gp);
+      uint32_t size = *(uint32_t*)(chunk + gp);
       gp += 4;
       const uint32_t asize = (size + SZ_VAL - 1) / SZ_VAL;
-      cc->globals[gi] = ptr_to_val(cc->pool + pi);
-      cc->pool[pi++] = hd_build_large(asize);
+      cc->globals[gi] = obj_to_val(cc->pool + pi);
+      cc->pool[pi++] = hd_build_large(0, asize);
       cc->pool[pi + asize - 1] = 0;
-      memcpy(cc->pool + pi, size, bytes + gp);
+      memcpy(cc->pool + pi, chunk + gp, size);
       pi += asize;
     } break;
     case 0x01: /* Int */
-      cc->globals[gi] = int_to_val(*(int32_t*)(bytes + gp));
+      cc->globals[gi] = int_to_val(*(int32_t*)(chunk + gp));
       gp += 4;
       break;
     case 0x02: /* Float */
-      cc->globals[gi] = flt_to_val(*(float*)(bytes + gp));
+      cc->globals[gi] = flt_to_val(*(float*)(chunk + gp));
       gp += 4;
       break;
     default:
@@ -168,11 +177,100 @@ int load_code(code_set_t *set, size_t size, uint8_t *chunk) {
   }
 
   /* -- Read opcodes -- */
-  uint32_t op = hd_size + sz_global;
-  uint32_t oi = 0;
+  uint32_t oi, op;
 
   /* Allocate label table */
-#error UNIMPLEMENTED!
+  void **ltbl = (void**) malloc(sizeof(void*) * cc->num_ops);
+  if(ltbl == NULL) {
+    log_err(-23, "Cannot allocate label table!\n");
+  }
 
-  return 0;
+  /* Construct label table */
+  uint32_t n_ptr = 0, n_int = 0;
+  uint8_t *opp = (uint8_t*) cc->op;
+  for(oi = 0, op = hd_size + sz_global;
+      op < hd_size + sz_global + sz_opcode;
+      oi++) {
+    ltbl[oi] = opp;
+    switch(opcode_param_type(chunk[op])) {
+    case OP_P_NONE:
+      op += 1;
+      opp += sizeof(op_t);
+      break;
+    case OP_P_INT:
+      n_int += 1;
+      op += 1 + 4;
+      opp += sizeof(op_t) + sizeof(op_int_t);
+      break;
+    case OP_P_GLOBAL:
+    case OP_P_LABEL:
+      n_ptr += 1;
+      op += 1 + 4;
+      opp += sizeof(op_t) + sizeof(op_ptr_t);
+      break;
+    }
+  }
+  if(op >= hd_size + sz_global + sz_opcode) {
+    log_err(-8, "Too many bytes read for opcode segment!\n");
+  }
+  if(oi != cc->num_ops) {
+    log_err(-8, "Wrong number of opcodes!\n");
+  }
+
+  /* Allocate ops */
+  const uint32_t n_op = cc->num_ops;
+  const size_t sz_op =
+    sizeof(op_t) * n_op +
+    sizeof(op_int_t) * n_int +
+    sizeof(op_ptr_t) * n_ptr;
+  cc->op = (op_t*) a_alloc(sz_op);
+  if(cc->op == NULL) {
+    log_err(-22, "Cannot allocate code segment!\n");
+  }
+
+  /* Read opcodes */
+  uint8_t *dst = (uint8_t*) cc->op;
+  for(op = hd_size + sz_global;
+      op < hd_size + sz_global + sz_opcode;) {
+    const op_t c = chunk[op];
+    *(op_t*) dst = c;
+    dst += sizeof(op_t);
+    switch(opcode_param_type(c)) {
+    case OP_P_NONE: op += 1; break;
+    case OP_P_INT: {
+      *(int32_t*) dst = *(int32_t*) (chunk + (op + 1));
+      dst += sizeof(op_int_t);
+      op += 1 + 4;
+    } break;
+    case OP_P_GLOBAL: {
+      uint32_t idx = *(uint32_t*) (chunk + (op + 1));
+      if(cc->off_global <= idx) { /* Load from current code */
+        if(cc->off_global + cc->num_globals <= idx) {
+          log_err(-22, "Global index out of range (%d)!\n", idx);
+        }
+        *(op_ptr_t*) dst = cc->globals + (idx - cc->off_global);
+      } else { /* Load from previous codes */
+        *(op_ptr_t*) dst = get_global_by_index(set, idx);
+      }
+      dst += sizeof(op_ptr_t);
+      op += 1 + 4;
+    } break;
+    case OP_P_LABEL: {
+      uint32_t idx = *(uint32_t*) (chunk + (op + 1));
+      *(op_ptr_t*) dst = ltbl[idx];
+      dst += sizeof(op_ptr_t);
+      op += 1 + 4;
+    } break;
+    }
+  }
+  if(op >= hd_size + sz_global + sz_opcode) {
+    log_err(-8, "Too many bytes read for opcode segment!\n");
+  }
+
+  /* Free label table */
+  free(ltbl);
+
+  /* Load Done */
+  set->num_codes += 1;
+  return set->num_codes;
 }
