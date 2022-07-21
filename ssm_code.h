@@ -10,18 +10,48 @@
 /* OpCode */
 typedef int32_t op_t;
 
-enum opcode {
+typedef enum opcode {
   OP_NOP = 0,
-};
+  OP_ACC_G,
+  OP_JMP,
+} opcode_t;
 
-/* Code set */
+int is_opcode_with_global(opcode_t);
+int is_opcode_with_int(opcode_t);
+
+/* Code set
+ * -- Structure
+ * - [00-07] header
+ * - [00] (4B) Magic Number: 0xca 0xfe 0x53 0x01
+ * - [01] (4B) Previous Token
+ * - [02] (4B) Current Token
+ * - [03] (4B) Index Offset of Globals
+ * - [04] (4B) Number of Globals
+ * - [05] (4B) Size of Global Segment
+ * - [06] (4B) Number of Opcodes
+ * - [07] (4B) Size of Opcode Segment
+ * - [08-xx] (x B) Global Segment
+ * - [xx-yy] (y B) Opcode Segment
+ * -- Global
+ * - (1B) Tag + (x B) Alpha
+ * - 0x00 (Bytes) + (4B) Size + (Size B) Raw Data
+ * - 0x01 (Int) + (4B) Int
+ * - 0x02 (Flt) + (4B) Float
+ */
 
 typedef struct code {
+  /* Token (for continuity check) */
+  uint32_t prev_token;
+  uint32_t curr_token;
+
   /* Globals */
-  op_t first_global, num_globals;
+  uint32_t off_global; /* Global index offset */
+  uint32_t num_globals; /* # of globals */
   val_t *globals;
+  val_t *pool; /* Global constant pool */
 
   /* Opcodes */
+  uint32_t num_ops;
   op_t *op;
 } code_t;
 
