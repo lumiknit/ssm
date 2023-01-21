@@ -42,43 +42,12 @@ fn allocate_two_values() {
 }
 
 #[test]
-fn allocate_bytes() {
-    const WORD_SIZE: usize = std::mem::size_of::<usize>();
-    let mut pool = Pool::new(1024);
-    // Allocate 1
-    let saved_left_1 = pool.left;
-    let bytes1 = pool.alloc_bytes(17);
-    assert_eq!(pool.left, saved_left_1 - (17 / WORD_SIZE) - 1);
-    // Allocate 2
-    let saved_left_2 = pool.left;
-    let _bytes2 = pool.alloc_bytes(35);
-    assert_eq!(pool.left, saved_left_2 - (35 / WORD_SIZE) - 1);
-    // Allooate last
-    let saved_left_3 = pool.left;
-    let bytes3 = pool.alloc_bytes(48);
-    assert_eq!(pool.left, saved_left_3 - (48 / WORD_SIZE));
-    // ptrs
-    let p1 = bytes1.unwrap();
-    let p3 = bytes3.unwrap();
-    unsafe {
-        p3.write_bytes(0, 100);
-        assert_eq!((p1 as *const u8).read(), 0);
-        p3.write_bytes(31, 100);
-        assert_eq!((p1 as *const u8).read(), 31);
-    }
-}
-
-#[test]
 fn allocation_failed() {
     const WORD_SIZE: usize = std::mem::size_of::<usize>();
     let mut pool = Pool::new(WORD_SIZE * 100);
     assert!(pool.alloc(30).is_ok());
     assert!(pool.alloc(100).is_err());
     assert!(pool.alloc(71).is_err());
-    assert!(pool.alloc_bytes(1 + WORD_SIZE * 70).is_err());
-    assert!(pool.alloc_bytes(12345).is_err());
-    assert!(pool.alloc_bytes(WORD_SIZE * 70).is_ok());
-    assert!(pool.alloc_bytes(WORD_SIZE * 70).is_err());
 }
 
 #[test]

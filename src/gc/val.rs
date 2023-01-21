@@ -236,36 +236,53 @@ impl Hd {
 pub struct Tup(pub *mut Uptr);
 
 impl Tup {
+    #[inline(always)]
+    pub fn short_size(vals: usize) -> usize {
+        vals + 1
+    }
+
+    #[inline(always)]
+    pub fn long_size(bytes: usize) -> usize {
+        let word_size = std::mem::size_of::<usize>();
+        1 + (bytes + word_size - 1) / word_size
+    }
+
+    #[inline(always)]
     pub fn header(self) -> Hd {
         unsafe {
             Hd(self.0.read())
         }
     }
 
+    #[inline(always)]
     pub fn set_header(self, hd: Hd) {
         unsafe {
             self.0.write(hd.0);
         }
     }
 
+    #[inline(always)]
     pub fn val(self, idx: usize) -> Val {
         unsafe {
             Val(self.0.add(idx + 1).read() as Iptr)
         }
     }
 
+    #[inline(always)]
     pub fn set_val(self, idx: usize, val: Val) {
         unsafe {
             self.0.add(idx + 1).write(val.0 as Uptr);
         }
     }
 
+    #[inline(always)]
     pub fn bytes(self) -> *mut u8 {
         unsafe {
             self.0.add(1) as *mut u8
         }
     }
 
+    #[inline(always)]
     pub fn byte_at(self, idx: usize) -> u8 {
         unsafe {
             self.bytes().add(idx).read()

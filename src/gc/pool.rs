@@ -58,22 +58,25 @@ impl Pool {
         }
     }
 
-    pub fn alloc_bytes(&mut self, bytes: usize) -> Result<*mut Uptr, ()> {
-        let word_size = std::mem::size_of::<Uptr>();
-        let vals = (bytes + word_size - 1) / word_size;
-        self.alloc(vals)
+    #[inline(always)]
+    pub fn allocatable_short(&self, vals: usize) -> bool {
+        self.left >= Tup::short_size(vals)
+    }
+
+    #[inline(always)]
+    pub fn allocatable_long(&self, bytes: usize) -> bool {
+        self.left >= Tup::long_size(bytes)
     }
 
     pub fn alloc_short(&mut self, vals: usize, tag: Uptr) -> Result<Tup, ()> {
-        let ptr = self.alloc(vals + 1)?;
+        let ptr = self.alloc(Tup::short_size(vals))?;
         let tup = Tup(ptr);
         tup.set_header(Hd::short(vals as Uptr, tag as Uptr));
         Ok(tup)
     }
 
     pub fn alloc_long(&mut self, bytes: usize) -> Result<Tup, ()> {
-        let word_size = std::mem::size_of::<Uptr>();
-        let ptr = self.alloc_bytes(word_size + bytes)?;
+        let ptr = self.alloc(Tup::long_size(bytes))?;
         let tup = Tup(ptr);
         tup.set_header(Hd::long(bytes as Uptr));
         Ok(tup)
