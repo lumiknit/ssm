@@ -22,10 +22,13 @@ pub type Iptr = i32;
 #[cfg(target_pointer_width = "32")]
 pub type Uptr = u32;
 
+// Pointer
+pub type Ptr = *mut Uptr;
+
 // Val type
 
 #[derive(PartialEq, Debug, Clone, Copy)]
-pub struct Val(pub Iptr);
+pub struct Val(pub Uptr);
 
 impl fmt::Display for Val {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -36,28 +39,23 @@ impl fmt::Display for Val {
 impl Val {
     // to_type
     #[inline(always)]
-    pub fn to_usize(self) -> usize {
-        self.0 as usize
-    }
-
-    #[inline(always)]
     pub fn to_uint(self) -> Uptr {
-        (self.0 as Uptr) >> 1
-    }
-
-    #[inline(always)]
-    pub fn to_int(self) -> Iptr {
         self.0 >> 1
     }
 
     #[inline(always)]
+    pub fn to_int(self) -> Iptr {
+        (self.0 as Iptr) >> 1
+    }
+
+    #[inline(always)]
     pub fn to_flt(self) -> Fptr {
-        Fptr::from_bits((self.0 as Uptr) & !(1 as Uptr))
+        Fptr::from_bits(self.0 & !(1 as Uptr))
     }
 
     #[inline(always)]
     pub fn to_ptr<T>(self) -> *mut T {
-        (self.0 - (1 as Iptr)) as *mut T
+        (self.0 & (!(1 as Uptr))) as *mut T
     }
 
     #[inline(always)]
@@ -66,39 +64,35 @@ impl Val {
     }
 
     // from_type
-    #[inline(always)]
-    pub fn from_usize(val: usize) -> Self {
-        Val(val as Iptr)
-    }
 
     #[inline(always)]
     pub fn from_uint(val: Uptr) -> Self {
-        Val(((val as Iptr) << 1) | (1 as Iptr))
+        Val((val << 1) | (1 as Uptr))
     }
 
     #[inline(always)]
     pub fn from_int(val: Iptr) -> Self {
-        Val(((val as Iptr) << 1) | (1 as Iptr))
+        Val(((val << 1) as Uptr) | (1 as Uptr))
     }
 
     #[inline(always)]
     pub fn from_flt(val: Fptr) -> Self {
-        Val((val.to_bits() as Iptr) | (1 as Iptr))
+        Val((val.to_bits() as Uptr) | (1 as Uptr))
     }
 
     #[inline(always)]
     pub fn from_ptr<T>(ptr: *const T) -> Self {
-        Val((ptr as Iptr) + (1 as Iptr))
+        Val((ptr as Uptr) | (1 as Uptr))
     }
 
     #[inline(always)]
     pub fn from_gc_ptr<T>(ptr: *const T) -> Self {
-        Val(ptr as Iptr)
+        Val(ptr as Uptr)
     }
 
     // check type
     #[inline(always)]
-    pub fn is_ptr(self) -> bool {
+    pub fn is_gc_ptr(self) -> bool {
         (self.0 & 1) == 0
     }
 
@@ -154,66 +148,66 @@ impl Hd {
 
     #[inline(always)]
     pub fn from_val(val: Val) -> Self {
-        Self(val.0 as Uptr)
+        Self(val.0)
     }
 
     #[inline(always)]
     pub fn to_val(&self) -> Val {
-        Val(self.0 as Iptr)
+        Val(self.0)
     }
-    
+
     #[inline(always)]
-    pub fn color(&self) -> Uptr {
+    pub fn color(self) -> Uptr {
         self.0 & Self::COLOR_MASK
     }
 
     #[inline(always)]
-    pub fn is_black(&self) -> bool {
-        Self::COLOR_BLACK == (self.0 & Self::COLOR_MASK)
+    pub fn is_black(self) -> bool {
+        Self::COLOR_BLACK == self.color()
     }
 
     #[inline(always)]
-    pub fn is_gray(&self) -> bool {
-        Self::COLOR_GRAY == (self.0 & Self::COLOR_MASK)
+    pub fn is_gray(self) -> bool {
+        Self::COLOR_GRAY == self.color()
     }
 
     #[inline(always)]
-    pub fn is_white(&self) -> bool {
-        Self::COLOR_WHITE == (self.0 & Self::COLOR_MASK)
+    pub fn is_white(self) -> bool {
+        Self::COLOR_WHITE == self.color()
     }
 
     #[inline(always)]
-    pub fn mark(&mut self, color: Uptr) {
-        *self = Self(self.0 | (color & Self::COLOR_MASK));
+    pub fn marked(self, color: Uptr) -> Self {
+        Self(self.0 | (color & Self::COLOR_MASK))
     }
 
     #[inline(always)]
-    pub fn unmark(&mut self) {
-        *self = Self(self.0 & Self::COLOR_INV_MASK);
+    pub fn unmarked(&self) -> Self {
+        Self(self.0 & Self::COLOR_INV_MASK)
     }
 
     #[inline(always)]
-    pub fn is_long(&self) -> bool {
+    pub fn is_long(self) -> bool {
         0 != (self.0 & Self::LONG_BIT)
     }
 
     #[inline(always)]
-    pub fn tag(&self) -> Uptr {
+    pub fn tag(self) -> Uptr {
         self.0 & Self::TAG_MASK
     }
 
     #[inline(always)]
-    pub fn long_size(&self) -> Uptr {
+    pub fn long_size(self) -> Uptr {
         self.0 & Self::LONG_SIZE_MASK
     }
 
     #[inline(always)]
-    pub fn long_bytes(&self) -> Uptr {
+    pub fn long_bytes(self) -> Uptr {
         (self.0 & Self::LONG_SIZE_MASK) * ((Uptr::BITS / 8) as Uptr)
     }
 
     #[inline(always)]
-    pub fn size(&self) -> Uptr {
+    pub fn size(self) -> Uptr {
         (self.0 & Self::SIZE_MASK) >> Self::SIZE_SHIFT
     }
 
@@ -233,59 +227,74 @@ impl Hd {
 }
 
 #[derive(PartialEq, Debug, Clone, Copy)]
-pub struct Tup(pub *mut Uptr);
+pub struct Tup(pub Ptr);
 
 impl Tup {
     #[inline(always)]
-    pub fn short_size(vals: usize) -> usize {
+    pub fn short_size(vals: Uptr) -> Uptr {
         vals + 1
     }
 
     #[inline(always)]
-    pub fn long_size(bytes: usize) -> usize {
-        let word_size = std::mem::size_of::<usize>();
+    pub fn long_size(bytes: Uptr) -> Uptr {
+        let word_size = std::mem::size_of::<usize>() as Uptr;
         1 + (bytes + word_size - 1) / word_size
     }
 
     #[inline(always)]
     pub fn header(self) -> Hd {
-        unsafe {
-            Hd(self.0.read())
-        }
+        unsafe { Hd(self.0.read()) }
     }
 
     #[inline(always)]
     pub fn set_header(self, hd: Hd) {
+        unsafe { self.0.write(hd.0) }
+    }
+
+    #[inline(always)]
+    pub fn mark(self, color: Uptr) -> bool {
         unsafe {
-            self.0.write(hd.0);
+            let hd = Hd(self.0.read());
+            self.0.write(hd.marked(color).0);
+            hd.is_white() && !hd.is_long()
         }
     }
 
     #[inline(always)]
-    pub fn val(self, idx: usize) -> Val {
+    pub fn unmark(self) {
         unsafe {
-            Val(self.0.add(idx + 1).read() as Iptr)
+            let hd = Hd(self.0.read());
+            self.0.write(hd.unmarked().0);
+        }
+    }
+
+    pub fn vals(self) -> Uptr {
+        if self.header().is_long() {
+            Self::long_size(self.header().long_size())
+        } else {
+            Self::short_size(self.header().size())
         }
     }
 
     #[inline(always)]
-    pub fn set_val(self, idx: usize, val: Val) {
+    pub fn val(self, idx: Uptr) -> Val {
+        unsafe { Val(self.0.add((idx as usize) + 1).read()) }
+    }
+
+    #[inline(always)]
+    pub fn set_val(self, idx: Uptr, val: Val) {
         unsafe {
-            self.0.add(idx + 1).write(val.0 as Uptr);
+            self.0.add((idx as usize) + 1).write(val.0 as Uptr);
         }
     }
 
     #[inline(always)]
     pub fn bytes(self) -> *mut u8 {
-        unsafe {
-            self.0.add(1) as *mut u8
-        }
+        unsafe { self.0.add(1) as *mut u8 }
     }
 
     #[inline(always)]
-    pub fn byte_at(self, idx: usize) -> u8 {
-        unsafe {
-            self.bytes().add(idx).read()
-        }
+    pub fn byte_at(self, idx: Uptr) -> u8 {
+        unsafe { self.bytes().add(idx as usize).read() }
     }
 }

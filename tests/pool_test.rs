@@ -5,7 +5,6 @@ fn always_pass() {
     assert_eq!(1, 1);
 }
 
-
 #[test]
 fn create_pool() {
     let pool = Pool::new(1024);
@@ -22,7 +21,9 @@ fn allocate_values() {
     // Check pointer
     let tup = tup.unwrap();
     assert_eq!(pool.left, old_left - 16);
-    unsafe { assert_eq!(tup, pool.ptr.add(old_left - 16)); }
+    unsafe {
+        assert_eq!(tup, pool.ptr.add(old_left - 16));
+    }
 }
 
 #[test]

@@ -1,3 +1,3 @@
-pub mod val;
-pub mod pool;
 pub mod mem;
+pub mod pool;
+pub mod val;
