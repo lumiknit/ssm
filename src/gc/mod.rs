@@ -28,8 +28,7 @@ impl Stack {
         let word_size = std::mem::size_of::<Uptr>();
         let bytes = size as usize * word_size;
         let ptr = unsafe {
-            let layout =
-                Layout::from_size_align_unchecked(bytes, word_size);
+            let layout = Layout::from_size_align_unchecked(bytes, word_size);
             let ptr = alloc(layout);
             if ptr.is_null() {
                 handle_alloc_error(layout);
@@ -54,10 +53,7 @@ impl Stack {
         let bytes = self.size as usize * word_size;
         let new_bytes = new_size as usize * word_size;
         let new_ptr = unsafe {
-            let layout = Layout::from_size_align_unchecked(
-                bytes,
-                word_size,
-            );
+            let layout = Layout::from_size_align_unchecked(bytes, word_size);
             let new_ptr = realloc(self.ptr as *mut u8, layout, new_bytes);
             if new_ptr.is_null() {
                 handle_alloc_error(layout);

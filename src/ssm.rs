@@ -7,7 +7,8 @@ fn main() {
         stack_initial_vals: 1024 * 128,
         minor_pool_initial_bytes: 1024 * 1024,
         major_pool_initial_bytes: 1024 * 1024 * 4,
-    }.build();
+    }
+    .build();
 
     if let Err(err) = vm.run() {
         println!("Error during vm.run():\n{}", err);
