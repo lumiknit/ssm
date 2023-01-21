@@ -7,6 +7,13 @@ edition = "2021"
 
 [dependencies]
 
+[profile.release]
+opt-level = 2
+lto = true
+codegen-units = 1
+panic = 'abort'
+strip = true
+
 # -- Binaries --
 [[bin]]
 name = "ssm"
