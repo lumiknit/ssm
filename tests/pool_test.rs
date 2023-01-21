@@ -1,13 +1,9 @@
+use ssm::gc::*;
 use ssm::gc::pool::Pool;
 
 #[test]
-fn always_pass() {
-    assert_eq!(1, 1);
-}
-
-#[test]
 fn create_pool() {
-    let pool = Pool::new(1024);
+    let _pool = Pool::new(1024);
 }
 
 #[test]
@@ -22,7 +18,7 @@ fn allocate_values() {
     let tup = tup.unwrap();
     assert_eq!(pool.left, old_left - 16);
     unsafe {
-        assert_eq!(tup, pool.ptr.add(old_left - 16));
+        assert_eq!(tup, pool.ptr.add(old_left as usize - 16));
     }
 }
 
@@ -63,9 +59,9 @@ fn allocate_short() {
     assert!(hd.is_black());
     assert_eq!(hd.tag(), 12);
     assert_eq!(hd.size(), 4);
-    assert_eq!(pool.left, (1024 / WORD_SIZE) - 5);
+    assert_eq!(pool.left, (1024 / WORD_SIZE) as val::Uptr - 5);
     unsafe {
-        assert_eq!(tup.0, pool.ptr.add(pool.left));
+        assert_eq!(tup.0, pool.ptr.add(pool.left as usize));
         assert_eq!(tup.0.read(), hd.0);
     }
 }
