@@ -1,5 +1,5 @@
-enum Op {
+pub enum Op {
 
 }
 
-type Codes = Vec<Op>;
+pub type Codes = Vec<Op>;
