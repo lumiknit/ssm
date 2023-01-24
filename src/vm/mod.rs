@@ -2,6 +2,7 @@ pub mod code;
 
 use crate::gc::*;
 
+#[allow(dead_code)]
 pub struct VM {
     // Memory
     mem: Mem,

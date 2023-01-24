@@ -214,7 +214,7 @@ impl Hd {
     #[inline(always)]
     pub fn short(size: Uptr, tag: Uptr) -> Self {
         Self(
-            Self::COLOR_BLACK
+            Self::COLOR_WHITE
                 | ((size << Self::SIZE_SHIFT) & Self::SIZE_MASK)
                 | (tag & Self::TAG_MASK),
         )
@@ -222,7 +222,7 @@ impl Hd {
 
     #[inline(always)]
     pub fn long(size: Uptr) -> Self {
-        Self(Self::COLOR_BLACK | Self::LONG_BIT | (size & Self::LONG_SIZE_MASK))
+        Self(Self::COLOR_WHITE | Self::LONG_BIT | (size & Self::LONG_SIZE_MASK))
     }
 }
 
@@ -230,6 +230,16 @@ impl Hd {
 pub struct Tup(pub Ptr);
 
 impl Tup {
+    #[inline(always)]
+    pub fn from_val(val: Val) -> Self {
+        Self(val.to_gc_ptr())
+    }
+
+    #[inline(always)]
+    pub fn to_val(self) -> Val {
+        Val::from_gc_ptr(self.0)
+    }
+
     #[inline(always)]
     pub fn short_size(vals: Uptr) -> Uptr {
         vals + 1
@@ -273,6 +283,27 @@ impl Tup {
             Self::long_size(self.header().long_size())
         } else {
             Self::short_size(self.header().size())
+        }
+    }
+
+    // Helpers for RW
+
+    #[inline(always)]
+    pub fn is_long(self) -> bool {
+        self.header().is_long()
+    }
+
+    #[inline(always)]
+    pub fn tag(self) -> Uptr {
+        self.header().tag()
+    }
+
+    #[inline(always)]
+    pub fn len(self) -> Uptr {
+        if self.is_long() {
+            self.header().long_size()
+        } else {
+            self.header().size()
         }
     }
 

@@ -1,5 +1,5 @@
-use ssm::gc::*;
 use ssm::gc::pool::Pool;
+use ssm::gc::*;
 
 #[test]
 fn create_pool() {
@@ -56,7 +56,7 @@ fn allocate_short() {
     let tup = tup.unwrap();
     let hd = tup.header();
     assert!(!hd.is_long());
-    assert!(hd.is_black());
+    assert!(hd.is_white());
     assert_eq!(hd.tag(), 12);
     assert_eq!(hd.size(), 4);
     assert_eq!(pool.left, (1024 / WORD_SIZE) as val::Uptr - 5);

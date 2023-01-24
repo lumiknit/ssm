@@ -93,22 +93,17 @@ impl Pool {
     }
 
     pub fn copy_tup(&mut self, tup: Tup) -> Result<Tup, ()> {
-        let word_size = std::mem::size_of::<Uptr>();
         // Calculate tuple size
-        let hd = tup.header();
-        let size = if hd.is_long() {
-            Tup::long_size(hd.long_size())
-        } else {
-            Tup::short_size(hd.size())
-        };
+        let size = tup.vals();
         let new_tup = self.alloc(size)?;
         unsafe {
-            std::ptr::copy_nonoverlapping(
+            std::ptr::copy_nonoverlapping::<Uptr>(
                 tup.0,
                 new_tup,
-                word_size * (size as usize),
+                size as usize,
             );
         }
-        Ok(Tup(new_tup))
+        let new_tup = Tup(new_tup);
+        Ok(new_tup)
     }
 }
