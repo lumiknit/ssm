@@ -59,7 +59,7 @@ fn allocate_short() {
     assert!(hd.is_white());
     assert_eq!(hd.tag(), 12);
     assert_eq!(hd.size(), 4);
-    assert_eq!(pool.left, (1024 / WORD_SIZE) as val::Uptr - 5);
+    assert_eq!(pool.left, (1024 / WORD_SIZE) as val::usize - 5);
     unsafe {
         assert_eq!(tup.0, pool.ptr.add(pool.left as usize));
         assert_eq!(tup.0.read(), hd.0);

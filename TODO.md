@@ -1,5 +1,13 @@
 # TODO
 
+## WIP
+
+- Changing default types
+  - Uptr, Iptr -> usize, isize
+  - Change voca vals -> words
+  - Change major heap into free list
+  - Done for alloc.rs, pool.rs, val.rs
+
 ## GC
 
 - Change major heap into free list

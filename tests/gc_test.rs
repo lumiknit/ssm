@@ -46,7 +46,7 @@ fn allocate_shorts() {
 
 #[test]
 fn minor_gc_00() {
-    let word_size = std::mem::size_of::<Uptr>();
+    let word_size = std::mem::size_of::<usize>();
     let mut mem = Mem::new(16, 16, 32 * word_size, 32 * word_size);
     mem.alloc_short(4, 1).unwrap();
     assert_eq!(mem.pools[0].left, 27);
@@ -63,7 +63,7 @@ fn minor_gc_00() {
 
 #[test]
 fn minor_gc_01() {
-    let word_size = std::mem::size_of::<Uptr>();
+    let word_size = std::mem::size_of::<usize>();
     let mut mem = Mem::new(16, 16, 32 * word_size, 128 * word_size);
     // Create a garbage
     mem.alloc_short(4, 41).unwrap();
@@ -93,9 +93,9 @@ fn minor_gc_01() {
     }
     unsafe {
         assert!(
-            mem.stack.get(0).to_gc_ptr::<Uptr>().add(5)
+            mem.stack.get(0).to_gc_ptr::<usize>().add(5)
                 == mem.stack.get(1).to_gc_ptr()
-                || mem.stack.get(1).to_gc_ptr::<Uptr>().add(5)
+                || mem.stack.get(1).to_gc_ptr::<usize>().add(5)
                     == mem.stack.get(0).to_gc_ptr()
         );
     }
@@ -103,7 +103,7 @@ fn minor_gc_01() {
 
 #[test]
 fn minor_gc_02() {
-    let word_size = std::mem::size_of::<Uptr>();
+    let word_size = std::mem::size_of::<usize>();
     let mut mem = Mem::new(16, 16, 32 * word_size, 128 * word_size);
     // Create lots of garbage
     for _i in 0..100 {
@@ -158,7 +158,7 @@ fn minor_gc_02() {
 
 #[test]
 fn major_gc_00() {
-    let word_size = std::mem::size_of::<Uptr>();
+    let word_size = std::mem::size_of::<usize>();
     let mut mem = Mem::new(16, 16, 32 * word_size, 128 * word_size);
     // Create a garbage
     mem.alloc_short(4, 41).unwrap();

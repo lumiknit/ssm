@@ -24,8 +24,8 @@ pub struct VMConfig {
     // Memory
 
     // Initial size (in words) of global and stack
-    pub global_initial_vals: val::Uptr,
-    pub stack_initial_vals: val::Uptr,
+    pub global_initial_vals: val::usize,
+    pub stack_initial_vals: val::usize,
 
     // Initial size (in bytes) of minor and major pools
     pub minor_pool_initial_bytes: usize,

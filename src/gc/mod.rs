@@ -1,20 +1,20 @@
-pub mod pool;
+pub mod alloc;
 pub mod val;
+pub mod pool;
 
-use std::alloc::{alloc, dealloc, handle_alloc_error, realloc, Layout};
-
-use crate::gc::pool::Pool;
 use crate::gc::val::*;
+use crate::gc::alloc::*;
+use crate::gc::pool::Pool;
 
 pub struct Stack {
-    pub size: Uptr,
-    pub ptr: Ptr,
-    pub top: Uptr,
+    pub size: usize,
+    pub ptr: *mut usize,
+    pub top: usize,
 }
 
 impl Drop for Stack {
     fn drop(&mut self) {
-        let word_size = std::mem::size_of::<Uptr>();
+        let word_size = std::mem::size_of::<usize>();
         let bytes = self.size as usize * word_size;
         let layout = Layout::from_size_align(bytes, word_size).unwrap();
         unsafe {
@@ -24,8 +24,8 @@ impl Drop for Stack {
 }
 
 impl Stack {
-    pub fn new(size: Uptr) -> Stack {
-        let word_size = std::mem::size_of::<Uptr>();
+    pub fn new(size: usize) -> Stack {
+        let word_size = std::mem::size_of::<usize>();
         let bytes = size as usize * word_size;
         let ptr = unsafe {
             let layout = Layout::from_size_align_unchecked(bytes, word_size);
@@ -42,14 +42,14 @@ impl Stack {
         }
     }
 
-    pub fn reserve(&mut self, vals: Uptr) -> Uptr {
+    pub fn reserve(&mut self, vals: usize) -> usize {
         let old_top = self.top;
         let new_top = old_top + vals;
         if new_top < self.size {
             return old_top;
         }
         // Extend size
-        let word_size = std::mem::size_of::<Uptr>();
+        let word_size = std::mem::size_of::<usize>();
         let new_size = std::cmp::max(self.size * 2, new_top + 1);
         let bytes = self.size as usize * word_size;
         let new_bytes = new_size as usize * word_size;
@@ -67,16 +67,16 @@ impl Stack {
     }
 
     #[inline(always)]
-    pub fn move_top_unchecked(&mut self, vals: Iptr) {
-        self.top += vals as Uptr;
+    pub fn move_top_unchecked(&mut self, vals: isize) {
+        self.top += vals as usize;
     }
 
-    pub fn move_top(&mut self, vals: Iptr) {
-        let mut new_top = (self.top as Iptr) + vals;
+    pub fn move_top(&mut self, vals: isize) {
+        let mut new_top = (self.top as isize) + vals;
         if new_top < 0 {
             new_top = 0;
         }
-        let new_top = new_top as Uptr;
+        let new_top = new_top as usize;
         if new_top > self.size {
             self.reserve(new_top - self.size);
         }
@@ -112,11 +112,11 @@ impl Stack {
         }
     }
 
-    pub fn get(&self, idx: Uptr) -> Val {
+    pub fn get(&self, idx: usize) -> Val {
         Val(unsafe { *self.ptr.add(idx as usize) })
     }
 
-    pub fn set(&self, idx: Uptr, val: Val) {
+    pub fn set(&self, idx: usize, val: Val) {
         unsafe {
             *self.ptr.add(idx as usize) = val.0;
         }
@@ -133,14 +133,14 @@ pub struct Mem {
 
 struct MarkState {
     limit: usize,
-    marked_vals: Uptr,
+    marked_vals: usize,
     marked: Vec<Tup>,
 }
 
 impl Mem {
     pub fn new(
-        global_initial_vals: Uptr,
-        stack_initial_vals: Uptr,
+        global_initial_vals: usize,
+        stack_initial_vals: usize,
         minor_pool_size: usize,
         major_pool_size: usize,
     ) -> Mem {
@@ -190,7 +190,7 @@ impl Mem {
         }
     }
 
-    pub fn mark_from_stack(&self, mark_limit: usize) -> Uptr {
+    pub fn mark_from_stack(&self, mark_limit: usize) -> usize {
         // mark_limit must be less than the number of pools
         if mark_limit > self.pools.len() {
             unreachable!();
@@ -224,7 +224,7 @@ impl Mem {
                 let new_tup = dst_pool.copy_tup(tup)?;
                 // Write new pointer to old memory
                 unsafe {
-                    tup.0.write(new_tup.0 as Uptr);
+                    tup.0.write(new_tup.0 as usize);
                 }
             }
         }
@@ -234,8 +234,8 @@ impl Mem {
     pub fn update_pointers(
         &self,
         pool: &Pool,
-        from: Uptr,
-        to: Uptr,
+        from: usize,
+        to: usize,
         mark_limit: usize,
     ) {
         // Update pointers in tuples
@@ -279,7 +279,7 @@ impl Mem {
 
     pub fn collect_major(
         &mut self,
-        required_free_vals: Uptr,
+        required_free_vals: usize,
     ) -> Result<(), ()> {
         let mark_limit = self.pools.len();
         // Run marking process from stack
@@ -287,7 +287,7 @@ impl Mem {
         // Calculate new major size
         let new_major_bytes = ((required_free_vals + new_major_vals) as usize)
             * 2
-            * std::mem::size_of::<Uptr>();
+            * std::mem::size_of::<usize>();
         let lb = std::cmp::max(self.pools[1].bytes / 2, self.pools[0].bytes);
         let new_major_bytes = std::cmp::max(new_major_bytes, lb);
         // Create new major pool
@@ -343,14 +343,14 @@ impl Mem {
         Ok(())
     }
 
-    pub fn alloc_short(&mut self, vals: Uptr, tag: Uptr) -> Result<Tup, ()> {
+    pub fn alloc_short(&mut self, vals: usize, tag: usize) -> Result<Tup, ()> {
         if !self.pools[0].allocatable_short(vals) {
             self.collect_minor()?;
         }
         self.pools[0].alloc_short(vals, tag)
     }
 
-    pub fn alloc_long(&mut self, bytes: Uptr) -> Result<Tup, ()> {
+    pub fn alloc_long(&mut self, bytes: usize) -> Result<Tup, ()> {
         let size = Tup::long_size(bytes);
         if self.pools[0].vals < size {
             // Minor is too small, allocate in major
@@ -366,7 +366,7 @@ impl Mem {
         }
     }
 
-    pub fn reserve_minor(&mut self, vals: Uptr) -> Result<(), ()> {
+    pub fn reserve_minor(&mut self, vals: usize) -> Result<(), ()> {
         if self.pools[0].left < vals {
             self.collect_minor()?;
         }

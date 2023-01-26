@@ -1,109 +1,88 @@
-// pool: ssm memory pool
+// pool: ssm memory pool for minor heap
 
-use std::alloc::{alloc, dealloc, handle_alloc_error, Layout};
-
-use crate::gc::val::{Hd, Ptr, Tup, Uptr};
+use crate::gc::val::*;
+use crate::gc::alloc::*;
 
 pub struct Pool {
     // Pool size informations
     pub bytes: usize,
-    pub vals: Uptr,
+    pub words: usize,
     // Pool usage pointers
-    pub left: Uptr,
+    pub left: usize,
     // Pool pointer
-    pub ptr: Ptr,
+    pub ptr: *mut usize,
 }
 
 impl Drop for Pool {
     fn drop(&mut self) {
-        let word_size = std::mem::size_of::<Uptr>();
-        let layout =
-            Layout::from_size_align(self.bytes as usize, word_size).unwrap();
-        unsafe {
-            dealloc(self.ptr as *mut u8, layout);
-        }
+        dealloc_words(self.ptr, self.words)
     }
 }
 
 impl Pool {
-    pub fn new(bytes: usize) -> Pool {
-        let word_size = std::mem::size_of::<Uptr>();
-        let vals = (bytes / word_size) as Uptr;
-        let ptr = unsafe {
-            let layout = Layout::from_size_align(bytes, word_size).unwrap();
-            let ptr = alloc(layout);
-            if ptr.is_null() {
-                handle_alloc_error(layout);
-            }
-            ptr as Ptr
-        };
-        Pool {
+    pub fn new(bytes: usize) -> Self {
+        let words = (bytes / WORD_SIZE) as usize;
+        let ptr = alloc_words(words);
+        Self {
             bytes: bytes,
-            vals: vals,
-            left: vals,
+            words,
+            left: words,
             ptr: ptr,
         }
     }
 
-    pub fn own(&self, ptr: Ptr) -> bool {
+    #[inline(always)]
+    pub fn own(&self, ptr: *mut usize) -> bool {
         let start = self.ptr as usize;
         let end = start + self.bytes;
         let ptr = ptr as usize;
         ptr >= start && ptr < end
     }
 
-    pub fn rewind(&mut self) {
-        self.left = self.vals;
+    #[inline(always)]
+    pub fn own_tup(&self, tup: Tup) -> bool {
+        self.own(tup.0)
     }
 
-    pub fn tup(&self, offset: Uptr) -> Tup {
+    #[inline(always)]
+    pub fn rewind(&mut self) {
+        self.left = self.words;
+    }
+
+    #[inline(always)]
+    pub fn tup(&self, offset: usize) -> Tup {
         unsafe { Tup(self.ptr.add(offset as usize)) }
     }
 
-    pub fn alloc(&mut self, vals: Uptr) -> Result<Ptr, ()> {
-        if self.left < vals {
-            return Err(());
+    pub fn alloc(&mut self, words: usize) -> Option<*mut usize> {
+        if self.left < words {
+            return None;
         }
-        self.left -= vals;
-        unsafe { Ok(self.ptr.add(self.left as usize)) }
+        self.left -= words;
+        unsafe { Some(self.ptr.add(self.left as usize)) }
     }
 
     #[inline(always)]
-    pub fn allocatable_short(&self, vals: Uptr) -> bool {
-        self.left >= Tup::short_size(vals)
+    pub fn allocatable_in_words(&self, words: usize) -> bool {
+        self.left >= Tup::words_from_words(words)
     }
 
     #[inline(always)]
-    pub fn allocatable_long(&self, bytes: Uptr) -> bool {
-        self.left >= Tup::long_size(bytes)
+    pub fn allocatable_in_bytes(&self, bytes: usize) -> bool {
+        self.left >= Tup::words_from_bytes(bytes)
     }
 
-    pub fn alloc_short(&mut self, vals: Uptr, tag: Uptr) -> Result<Tup, ()> {
-        let ptr = self.alloc(Tup::short_size(vals))?;
+    pub fn alloc_short(&mut self, words: usize, tag: usize) -> Option<Tup> {
+        let ptr = self.alloc(Tup::words_from_words(words))?;
         let tup = Tup(ptr);
-        tup.set_header(Hd::short(vals as Uptr, tag as Uptr));
-        Ok(tup)
+        tup.set_header(Hd::short(words as usize, tag as usize));
+        Some(tup)
     }
 
-    pub fn alloc_long(&mut self, bytes: Uptr) -> Result<Tup, ()> {
-        let ptr = self.alloc(Tup::long_size(bytes))?;
+    pub fn alloc_long(&mut self, bytes: usize) -> Option<Tup> {
+        let ptr = self.alloc(Tup::words_from_bytes(bytes))?;
         let tup = Tup(ptr);
-        tup.set_header(Hd::long(bytes as Uptr));
-        Ok(tup)
-    }
-
-    pub fn copy_tup(&mut self, tup: Tup) -> Result<Tup, ()> {
-        // Calculate tuple size
-        let size = tup.vals();
-        let new_tup = self.alloc(size)?;
-        unsafe {
-            std::ptr::copy_nonoverlapping::<Uptr>(
-                tup.0,
-                new_tup,
-                size as usize,
-            );
-        }
-        let new_tup = Tup(new_tup);
-        Ok(new_tup)
+        tup.set_header(Hd::long(bytes as usize));
+        Some(tup)
     }
 }
