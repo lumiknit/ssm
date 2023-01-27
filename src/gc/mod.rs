@@ -1,10 +1,10 @@
 pub mod alloc;
-pub mod val;
 pub mod pool;
+pub mod val;
 
-use crate::gc::val::*;
 use crate::gc::alloc::*;
 use crate::gc::pool::Pool;
+use crate::gc::val::*;
 
 pub struct Stack {
     pub size: usize,

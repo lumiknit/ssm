@@ -14,13 +14,23 @@ pub fn alloc_bytes(bytes: usize) -> *mut u8 {
 }
 
 pub fn alloc_words(words: usize) -> *mut usize {
-    let bytes = words.checked_mul(WORD_SIZE).expect("Allocation size overflow");
+    let bytes = words
+        .checked_mul(WORD_SIZE)
+        .expect("Allocation size overflow");
     alloc_bytes(bytes) as *mut usize
 }
 
-pub fn realloc_words(ptr: *mut usize, old_words: usize, new_words: usize) -> *mut usize {
-    let old_bytes = old_words.checked_mul(WORD_SIZE).expect("Allocation size overflow");
-    let new_bytes = new_words.checked_mul(WORD_SIZE).expect("Allocation size overflow");
+pub fn realloc_words(
+    ptr: *mut usize,
+    old_words: usize,
+    new_words: usize,
+) -> *mut usize {
+    let old_bytes = old_words
+        .checked_mul(WORD_SIZE)
+        .expect("Allocation size overflow");
+    let new_bytes = new_words
+        .checked_mul(WORD_SIZE)
+        .expect("Allocation size overflow");
     let layout = Layout::from_size_align(old_bytes, WORD_SIZE).unwrap();
     unsafe {
         let ptr = realloc(ptr as *mut u8, layout, new_bytes);
@@ -39,7 +49,9 @@ pub fn dealloc_bytes(ptr: *mut u8, bytes: usize) {
 }
 
 pub fn dealloc_words(ptr: *mut usize, words: usize) {
-    let bytes = words.checked_mul(WORD_SIZE).expect("Deallocation size overflow");
+    let bytes = words
+        .checked_mul(WORD_SIZE)
+        .expect("Deallocation size overflow");
     let layout = Layout::from_size_align(bytes, WORD_SIZE).unwrap();
     unsafe {
         dealloc(ptr as *mut u8, layout);
@@ -47,7 +59,11 @@ pub fn dealloc_words(ptr: *mut usize, words: usize) {
 }
 
 // Helper for major allocation
-pub fn alloc_major_short(tup_list: &mut *mut usize, words: usize, tag: usize) -> Tup {
+pub fn alloc_major_short(
+    tup_list: &mut *mut usize,
+    words: usize,
+    tag: usize,
+) -> Tup {
     let ptr = alloc_words(words + 1);
     unsafe {
         ptr.write(*tup_list as usize);
@@ -72,10 +88,9 @@ pub fn dealloc_major_next(tup_list: &mut *mut usize) {
         let next = Tup(*tup_list);
         let next_next = next.next();
         *tup_list = next_next.0;
-        if next.is_long() {
-            dealloc_bytes((next.0.sub(1)) as *mut u8, next.header().long_bytes() + WORD_SIZE);
-        } else {
-            dealloc_words(next.0.sub(1), next.header().words() + 1);
-        }
+        dealloc_bytes(
+            (next.0.sub(1)) as *mut u8,
+            next.header().bytes() + WORD_SIZE,
+        );
     }
 }

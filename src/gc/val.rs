@@ -5,6 +5,7 @@ use std::fmt;
 // -- Bit-trick value
 
 pub const WORD_SIZE: usize = std::mem::size_of::<usize>();
+pub const WORD_SHIFT: u32 = WORD_SIZE.trailing_zeros();
 
 // Pointer-size float
 
@@ -149,7 +150,7 @@ impl Hd {
     pub const COLOR_L: usize = (0x1 as usize) << Self::COLOR_SHIFT;
     pub const COLOR_MASK: usize = Self::COLOR_H | Self::COLOR_L;
     pub const COLOR_INV_MASK: usize = !Self::COLOR_MASK;
-    
+
     pub const COLOR_BLACK: usize = Self::COLOR_L | Self::COLOR_H;
     pub const COLOR_WHITE: usize = 0;
     pub const COLOR_GRAY: usize = Self::COLOR_L;
@@ -227,8 +228,51 @@ impl Hd {
     }
 
     #[inline(always)]
-    pub fn words(self) -> usize {
+    pub fn short_words(self) -> usize {
         (self.0 & Self::SIZE_MASK) >> Self::SIZE_SHIFT
+    }
+
+    #[inline(always)]
+    pub fn bytes(self) -> usize {
+        /* Must equivalent with
+         * if self.is_long() {
+         *     self.long_bytes()
+         * } else {
+         *     self.short_words() * WORD_SIZE
+         * } */
+        let is_long_bit: usize =
+            (self.0 & Self::LONG_BIT) >> Self::LONG_BIT_SHIFT;
+        let long_mask = is_long_bit * usize::MAX;
+        let short_bytes = self.short_words() * WORD_SIZE;
+        (short_bytes & !long_mask) | (self.long_bytes() & long_mask)
+    }
+
+    #[inline(always)]
+    pub fn words(self) -> usize {
+        /* Must equivalent with
+         * if self.is_long() {
+         *     self.long_words()
+         * } else {
+         *     self.short_words()
+         * } */
+        let is_long_bit: usize =
+            (self.0 & Self::LONG_BIT) >> Self::LONG_BIT_SHIFT;
+        let long_mask = is_long_bit * usize::MAX;
+        (self.short_words() & !long_mask) | (self.long_words() & long_mask)
+    }
+
+    #[inline(always)]
+    pub fn len(self) -> usize {
+        /* Must equivalent with
+         * if self.is_long() {
+         *     self.long_bytes()
+         * } else {
+         *     self.short_words()
+         * } */
+        let is_long_bit: usize =
+            (self.0 & Self::LONG_BIT) >> Self::LONG_BIT_SHIFT;
+        let long_mask = is_long_bit * usize::MAX;
+        (self.short_words() & !long_mask) | (self.long_bytes() & long_mask)
     }
 
     #[inline(always)]
@@ -327,13 +371,7 @@ impl Tup {
     // Size calculation
     pub fn words(self) -> usize {
         let hd = self.header();
-        Self::words_from_words(
-            if hd.is_long() {
-                hd.long_words()
-            } else {
-                hd.words()
-            },
-        )
+        Self::words_from_words(hd.words())
     }
 
     // Tuple helpers
@@ -350,11 +388,7 @@ impl Tup {
 
     #[inline(always)]
     pub fn len(self) -> usize {
-        if self.is_long() {
-            self.header().long_bytes()
-        } else {
-            self.header().words()
-        }
+        self.header().len()
     }
 
     #[inline(always)]

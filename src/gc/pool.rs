@@ -1,7 +1,7 @@
 // pool: ssm memory pool for minor heap
 
-use crate::gc::val::*;
 use crate::gc::alloc::*;
+use crate::gc::val::*;
 
 pub struct Pool {
     // Pool size informations
