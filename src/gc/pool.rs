@@ -15,14 +15,14 @@ pub struct Pool {
 
 impl Drop for Pool {
     fn drop(&mut self) {
-        dealloc_words(self.ptr, self.words)
+        unsafe { dealloc_words(self.ptr, self.words) }
     }
 }
 
 impl Pool {
     pub fn new(bytes: usize) -> Self {
         let words = (bytes / WORD_SIZE) as usize;
-        let ptr = alloc_words(words);
+        let ptr = unsafe { alloc_words(words) };
         Self {
             bytes: bytes,
             words,

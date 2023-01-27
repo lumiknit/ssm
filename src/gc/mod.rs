@@ -2,133 +2,26 @@ pub mod alloc;
 pub mod pool;
 pub mod val;
 
+use std::ptr;
+
 use crate::gc::alloc::*;
 use crate::gc::pool::Pool;
 use crate::gc::val::*;
 
-pub struct Stack {
-    pub size: usize,
-    pub ptr: *mut usize,
-    pub top: usize,
-}
-
-impl Drop for Stack {
-    fn drop(&mut self) {
-        let word_size = std::mem::size_of::<usize>();
-        let bytes = self.size as usize * word_size;
-        let layout = Layout::from_size_align(bytes, word_size).unwrap();
-        unsafe {
-            dealloc(self.ptr as *mut u8, layout);
-        }
-    }
-}
-
-impl Stack {
-    pub fn new(size: usize) -> Stack {
-        let word_size = std::mem::size_of::<usize>();
-        let bytes = size as usize * word_size;
-        let ptr = unsafe {
-            let layout = Layout::from_size_align_unchecked(bytes, word_size);
-            let ptr = alloc(layout);
-            if ptr.is_null() {
-                handle_alloc_error(layout);
-            }
-            ptr as Ptr
-        };
-        Stack {
-            size: size,
-            ptr: ptr,
-            top: 0,
-        }
-    }
-
-    pub fn reserve(&mut self, vals: usize) -> usize {
-        let old_top = self.top;
-        let new_top = old_top + vals;
-        if new_top < self.size {
-            return old_top;
-        }
-        // Extend size
-        let word_size = std::mem::size_of::<usize>();
-        let new_size = std::cmp::max(self.size * 2, new_top + 1);
-        let bytes = self.size as usize * word_size;
-        let new_bytes = new_size as usize * word_size;
-        let new_ptr = unsafe {
-            let layout = Layout::from_size_align_unchecked(bytes, word_size);
-            let new_ptr = realloc(self.ptr as *mut u8, layout, new_bytes);
-            if new_ptr.is_null() {
-                handle_alloc_error(layout);
-            }
-            new_ptr as Ptr
-        };
-        self.size = new_size;
-        self.ptr = new_ptr;
-        old_top
-    }
-
-    #[inline(always)]
-    pub fn move_top_unchecked(&mut self, vals: isize) {
-        self.top += vals as usize;
-    }
-
-    pub fn move_top(&mut self, vals: isize) {
-        let mut new_top = (self.top as isize) + vals;
-        if new_top < 0 {
-            new_top = 0;
-        }
-        let new_top = new_top as usize;
-        if new_top > self.size {
-            self.reserve(new_top - self.size);
-        }
-        self.top = new_top;
-    }
-
-    #[inline(always)]
-    pub fn push_unchecked(&mut self, val: Val) {
-        unsafe {
-            *self.ptr.add(self.top as usize) = val.0;
-        }
-        self.top += 1;
-    }
-
-    pub fn push(&mut self, val: Val) {
-        if self.top >= self.size {
-            self.reserve(self.top + 1 - self.size);
-        }
-        self.push_unchecked(val)
-    }
-
-    #[inline(always)]
-    pub fn pop_unchecked(&mut self) -> Val {
-        self.top -= 1;
-        Val(unsafe { *self.ptr.add(self.top as usize) })
-    }
-
-    pub fn pop(&mut self) -> Option<Val> {
-        if self.top == 0 {
-            None
-        } else {
-            Some(self.pop_unchecked())
-        }
-    }
-
-    pub fn get(&self, idx: usize) -> Val {
-        Val(unsafe { *self.ptr.add(idx as usize) })
-    }
-
-    pub fn set(&self, idx: usize, val: Val) {
-        unsafe {
-            *self.ptr.add(idx as usize) = val.0;
-        }
-    }
-}
-
 pub struct Mem {
-    pub global: Stack,
-    pub stack: Stack,
-    // pools[0]: Minor pool
-    // pools[1..]: Major pools
-    pub pools: [Pool; 2],
+    // Global stack
+    pub global: Vec<*mut usize>,
+    // Call stack
+    pub stack: Vec<*mut usize>,
+    // Minor memory pool
+    pub minor_pool: Pool,
+    // Major object linked list
+    // Objects which cannot be dropped until the mem is dropped
+    pub major_immortal: *mut usize,
+    // Objects which does not contain any other pointers managed by GC
+    pub major_leaves: *mut usize,
+    // Other objects
+    pub major_shorts: *mut usize,
 }
 
 struct MarkState {
@@ -142,12 +35,14 @@ impl Mem {
         global_initial_vals: usize,
         stack_initial_vals: usize,
         minor_pool_size: usize,
-        major_pool_size: usize,
     ) -> Mem {
         Mem {
-            global: Stack::new(global_initial_vals),
-            stack: Stack::new(stack_initial_vals),
-            pools: [Pool::new(minor_pool_size), Pool::new(major_pool_size)],
+            global: Vec::with_capacity(global_initial_vals),
+            stack: Vec::with_capacity(stack_initial_vals),
+            minor_pool: Pool::new(minor_pool_size),
+            major_immortal: ptr::null_mut(),
+            major_leaves: ptr::null_mut(),
+            major_shorts: ptr::null_mut(),
         }
     }
 
