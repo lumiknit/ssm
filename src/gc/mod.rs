@@ -10,11 +10,13 @@ use crate::gc::val::*;
 
 pub struct Mem {
     // Global stack
-    pub global: Vec<*mut usize>,
+    pub global: Vec<usize>,
     // Call stack
-    pub stack: Vec<*mut usize>,
+    pub stack: Vec<usize>,
+
     // Minor memory pool
     pub minor_pool: Pool,
+
     // Major object linked list
     // Objects which cannot be dropped until the mem is dropped
     pub major_immortal: *mut usize,
@@ -22,11 +24,13 @@ pub struct Mem {
     pub major_leaves: *mut usize,
     // Other objects
     pub major_shorts: *mut usize,
+
+    pub major_allocated: usize,
+    pub major_limit: usize,
 }
 
 struct MarkState {
-    limit: usize,
-    marked_vals: usize,
+    marked_words: usize,
     marked: Vec<Tup>,
 }
 
@@ -43,41 +47,37 @@ impl Mem {
             major_immortal: ptr::null_mut(),
             major_leaves: ptr::null_mut(),
             major_shorts: ptr::null_mut(),
+            major_allocated: 0,
+            major_limit: minor_pool_size * 4,
         }
     }
 
-    pub fn check_pointer_pool(&self, ptr: Ptr, limit: usize) -> bool {
-        for i in 0..limit {
-            if self.pools[i].own(ptr) {
-                return true;
-            }
-        }
-        false
+    pub fn update_major_pool_limit(&mut self) {
+        self.major_limit = self.major_allocated + self.minor_pool.words * 4;
     }
 
-    #[inline(always)]
-    fn mark_val(&self, val: Val, state: &mut MarkState) {
+    fn mark_val(
+        val: Val,
+        state: &mut MarkState,
+        markable_ptr: &dyn Fn(*mut usize) -> bool,
+    ) {
         if val.is_gc_ptr() {
             let tup = Tup::from_val(val);
-            if self.check_pointer_pool(tup.0, state.limit)
-                && tup.mark(Hd::COLOR_BLACK)
-            {
-                state.marked_vals += tup.vals();
+            if markable_ptr(tup.0) && tup.mark(Hd::COLOR_BLACK) {
+                state.marked_words += tup.words();
                 state.marked.push(tup);
-            }
-            while let Some(tup) = state.marked.pop() {
-                // Scan tuple
-                let hd = tup.header();
-                let vals = hd.size();
-                for i in 0..vals {
-                    let val = tup.val(i);
-                    if val.is_gc_ptr() {
-                        let tup = Tup(val.to_gc_ptr());
-                        if self.check_pointer_pool(tup.0, state.limit)
-                            && tup.mark(Hd::COLOR_BLACK)
-                        {
-                            state.marked_vals += tup.vals();
-                            state.marked.push(tup);
+                while let Some(tup) = state.marked.pop() {
+                    let hd = tup.header();
+                    let words = hd.short_words();
+                    for i in 0..words {
+                        let val = tup.val(i);
+                        if val.is_gc_ptr() {
+                            let tup = Tup::from_val(val);
+                            if markable_ptr(tup.0) && tup.mark(Hd::COLOR_BLACK)
+                            {
+                                state.marked_words += tup.words();
+                                state.marked.push(tup);
+                            }
                         }
                     }
                 }
@@ -85,186 +85,195 @@ impl Mem {
         }
     }
 
-    pub fn mark_from_stack(&self, mark_limit: usize) -> usize {
-        // mark_limit must be less than the number of pools
-        if mark_limit > self.pools.len() {
-            unreachable!();
-        }
+    pub fn mark_major(&mut self) -> usize {
         let mut state = MarkState {
-            limit: mark_limit,
-            marked_vals: 0,
+            marked_words: 0,
             marked: Vec::new(),
         };
-        // Marking tuples keeping marked stack as small
-        for i in 0..self.global.top {
-            self.mark_val(self.global.get(i), &mut state);
+        let markable_ptr = |_| true;
+        // Mark global stack
+        for val in self.global.iter() {
+            Self::mark_val(Val(*val), &mut state, &markable_ptr);
         }
-        for i in 0..self.stack.top {
-            self.mark_val(self.stack.get(i), &mut state);
+        // Mark call stack
+        for val in self.stack.iter() {
+            Self::mark_val(Val(*val), &mut state, &markable_ptr);
         }
-        state.marked_vals
+        // Return marked words
+        state.marked_words
     }
 
-    pub fn move_pointers(
-        src_pool: &Pool,
-        dst_pool: &mut Pool,
-    ) -> Result<(), ()> {
-        let mut mp = src_pool.left;
-        while mp < src_pool.vals {
-            let tup = src_pool.tup(mp);
-            let hd = tup.header();
-            mp += tup.vals();
-            if hd.color() != Hd::COLOR_WHITE {
-                // Allocate new memory in major pool
-                let new_tup = dst_pool.copy_tup(tup)?;
-                // Write new pointer to old memory
-                unsafe {
+    pub fn mark_minor(&mut self) -> usize {
+        let mut state = MarkState {
+            marked_words: 0,
+            marked: Vec::new(),
+        };
+        let markable_ptr = |ptr: *mut usize| self.minor_pool.own(ptr);
+        // Mark global stack
+        for val in self.global.iter() {
+            Self::mark_val(Val(*val), &mut state, &markable_ptr);
+        }
+        // Mark call stack
+        for val in self.stack.iter() {
+            Self::mark_val(Val(*val), &mut state, &markable_ptr);
+        }
+        // Return marked words
+        state.marked_words
+    }
+
+    #[inline(always)]
+    pub fn get_new_address(minor_pool: &Pool, val: Val) -> Option<Val> {
+        if val.is_gc_ptr() && minor_pool.own(val.to_gc_ptr()) {
+            unsafe {
+                Some(Val::from_gc_ptr(
+                    val.to_gc_ptr::<usize>().read() as *mut usize
+                ))
+            }
+        } else {
+            None
+        }
+    }
+
+    pub fn move_minor_to_major(&mut self) {
+        // First, record last short list
+        let old_major_shorts = self.major_shorts;
+        // First, copy all marked objects to major heap
+        // and write new address into old tuple
+        unsafe {
+            let ptr = self.minor_pool.ptr.add(self.minor_pool.left);
+            let lim = self.minor_pool.ptr.add(self.minor_pool.words);
+            while ptr < lim {
+                let tup = Tup(ptr);
+                let hd = tup.header();
+                if !hd.is_white() {
+                    let new_tup = if hd.is_long() {
+                        self.alloc_major_long(hd.long_bytes())
+                    } else {
+                        self.alloc_major_short(hd.short_words(), hd.tag())
+                    };
+                    ptr::copy_nonoverlapping::<usize>(
+                        ptr.add(1),
+                        new_tup.0.add(1),
+                        hd.words(),
+                    );
                     tup.0.write(new_tup.0 as usize);
                 }
             }
         }
-        Ok(())
-    }
-
-    pub fn update_pointers(
-        &self,
-        pool: &Pool,
-        from: usize,
-        to: usize,
-        mark_limit: usize,
-    ) {
-        // Update pointers in tuples
-        let mut off = from;
-        while off < to {
-            // Load tuple and move offset to next tuple
-            let tup = pool.tup(off);
-            off += tup.vals();
-            // Unmark
-            tup.unmark();
-            // Pass if the tuple is not short one
+        // Traverse all short list and re-addressing
+        let mut tup = Tup(self.major_shorts);
+        while !tup.0.is_null() && tup.0 != old_major_shorts {
             let hd = tup.header();
-            if hd.is_long() {
-                continue;
-            }
-            for i in 0..hd.size() {
-                let val = tup.val(i);
-                let ptr = val.to_gc_ptr();
-                // If a gc pointer is in pool <= mark_limit, it may moved
-                if val.is_gc_ptr() && self.check_pointer_pool(ptr, mark_limit) {
-                    // Update pointer
-                    let new_ptr = unsafe { (ptr as *mut Ptr).read() };
-                    tup.set_val(i, Val::from_gc_ptr(new_ptr));
+            let words = hd.short_words();
+            for i in 0..words {
+                if let Some(new) =
+                    Self::get_new_address(&self.minor_pool, tup.val(i))
+                {
+                    tup.set_val(i, new);
                 }
             }
+            tup = tup.next();
         }
-    }
-
-    pub fn update_stack_pointers(&self, stack: &Stack, mark_limit: usize) {
-        for i in 0..stack.top {
-            let val = stack.get(i);
-            let ptr = val.to_gc_ptr();
-            // If a gc pointer is in pool <= mark_limit, it may moved
-            if val.is_gc_ptr() && self.check_pointer_pool(ptr, mark_limit) {
-                // Update pointer
-                let new_ptr = unsafe { (ptr as *mut Ptr).read() };
-                stack.set(i, Val::from_gc_ptr(new_ptr));
+        // Traverse all global & stack and re-addressing
+        for val in self.global.iter_mut() {
+            if let Some(new) =
+                Self::get_new_address(&self.minor_pool, Val(*val))
+            {
+                *val = new.0;
+            }
+        }
+        for val in self.stack.iter_mut() {
+            if let Some(new) =
+                Self::get_new_address(&self.minor_pool, Val(*val))
+            {
+                *val = new.0;
             }
         }
     }
 
-    pub fn collect_major(
-        &mut self,
-        required_free_vals: usize,
-    ) -> Result<(), ()> {
-        let mark_limit = self.pools.len();
-        // Run marking process from stack
-        let new_major_vals = self.mark_from_stack(mark_limit);
-        // Calculate new major size
-        let new_major_bytes = ((required_free_vals + new_major_vals) as usize)
-            * 2
-            * std::mem::size_of::<usize>();
-        let lb = std::cmp::max(self.pools[1].bytes / 2, self.pools[0].bytes);
-        let new_major_bytes = std::cmp::max(new_major_bytes, lb);
-        // Create new major pool
-        let mut new_major_pool = Pool::new(new_major_bytes);
-        // Copy marked tuples into new major pool
-        for i in (0..self.pools.len()).rev() {
-            Self::move_pointers(&self.pools[i], &mut new_major_pool)?;
-        }
-        // Update moved pointers and mark tuples white
-        self.update_pointers(
-            &new_major_pool,
-            new_major_pool.left,
-            new_major_pool.vals,
-            mark_limit,
-        );
-        self.update_stack_pointers(&self.global, mark_limit);
-        self.update_stack_pointers(&self.stack, mark_limit);
-        // Replace major pool
-        self.pools[1] = new_major_pool;
-        // Rewind minor pool
-        self.pools[0].rewind();
-        // Done
-        Ok(())
+    pub fn collect_major(&mut self) {
+        // Run marking phase
+        let marked_words = self.mark_major();
+        // Traverse object list and free unmarked objects,
+        // also unmark marked objects
+        unimplemented!();
+        // Move marked object in minor heap to major heap
+        self.move_minor_to_major();
+        // Rewind pointer
+        self.minor_pool.rewind();
     }
 
-    pub fn collect_minor(&mut self) -> Result<(), ()> {
-        let mark_limit = 1;
-        // Calculate sizes
-        let major_left = self.pools[1].left;
-        let minor_allocated = self.pools[0].vals - self.pools[0].left;
-        // Check major pool size
-        if major_left < minor_allocated {
-            // Just run major collection
-            return self.collect_major(minor_allocated);
+    pub fn collect_minor(&mut self) {
+        // If major heap is full, run major collect
+        if self.major_allocated >= self.major_limit {
+            return self.collect_major();
         }
-        // Run marking process on minor pool
-        self.mark_from_stack(mark_limit);
-        // Move marked minor tuples into major pool
-        let (minor, major) = self.pools.split_at_mut(1);
-        Self::move_pointers(&minor[0], &mut major[0])?;
-        // Update moved pointers and mark tuples white
-        self.update_pointers(
-            &self.pools[1],
-            self.pools[1].left,
-            major_left,
-            mark_limit,
-        );
-        self.update_stack_pointers(&self.global, mark_limit);
-        self.update_stack_pointers(&self.stack, mark_limit);
-        // Rewind minor pool
-        self.pools[0].rewind();
-        // Done
-        Ok(())
+        // Run marking phase
+        let _marked_words = self.mark_minor();
+        // Move marked objects to major heap
+        self.move_minor_to_major();
+        // Rewind pointer
+        self.minor_pool.rewind();
     }
 
-    pub fn alloc_short(&mut self, vals: usize, tag: usize) -> Result<Tup, ()> {
-        if !self.pools[0].allocatable_short(vals) {
-            self.collect_minor()?;
-        }
-        self.pools[0].alloc_short(vals, tag)
+    pub fn alloc_major_long(&mut self, bytes: usize) -> Tup {
+        let tup_words = Tup::words_from_bytes(bytes);
+        self.major_allocated = self.major_allocated.saturating_add(tup_words);
+        unsafe { alloc_major_long(&mut self.major_leaves, bytes) }
     }
 
-    pub fn alloc_long(&mut self, bytes: usize) -> Result<Tup, ()> {
-        let size = Tup::long_size(bytes);
-        if self.pools[0].vals < size {
-            // Minor is too small, allocate in major
-            if !self.pools[1].allocatable_long(bytes) {
-                self.collect_major(bytes)?;
+    pub fn alloc_major_short(&mut self, words: usize, tag: usize) -> Tup {
+        let tup_words = Tup::words_from_words(words);
+        self.major_allocated = self.major_allocated.saturating_add(tup_words);
+        unsafe { alloc_major_short(&mut self.major_shorts, words, tag) }
+    }
+
+    pub fn alloc_short(&mut self, words: usize, tag: usize) -> Tup {
+        let tup_words = Tup::words_from_words(words);
+        // If minor pool is too small to contain the tuple,
+        // try to allocate in major heap
+        if self.minor_pool.words < tup_words {
+            // If some objects exist in minor heap, try to collect them
+            // for object age invariant
+            if self.minor_pool.left < self.minor_pool.words {
+                self.collect_minor();
             }
-            self.pools[1].alloc_long(bytes)
+            // Allocate object in major heap
+            self.alloc_major_short(words, tag)
         } else {
-            if !self.pools[0].allocatable_long(bytes) {
-                self.collect_minor()?;
+            // Try to allocate in minor heap
+            if self.minor_pool.left < tup_words {
+                self.collect_minor();
             }
-            self.pools[0].alloc_long(bytes)
+            self.minor_pool.alloc_short_unchecked(words, tag)
         }
     }
 
-    pub fn reserve_minor(&mut self, vals: usize) -> Result<(), ()> {
-        if self.pools[0].left < vals {
-            self.collect_minor()?;
+    pub fn alloc_long(&mut self, bytes: usize) -> Tup {
+        let tup_words = Tup::words_from_bytes(bytes);
+        // If minor pool is too small to contain the tuple,
+        // try to allocate in major heap
+        if self.minor_pool.words < tup_words {
+            self.alloc_major_long(bytes);
+            // If some objects exist in minor heap, try to collect them
+            // for object age invariant
+            if self.minor_pool.left < self.minor_pool.words {
+                self.collect_minor();
+            }
+            // Allocate object in major heap
+            self.alloc_major_long(bytes)
+        } else {
+            // Try to allocate in minor heap
+            if self.minor_pool.left < tup_words {
+                self.collect_minor();
+            }
+            self.minor_pool.alloc_long_unchecked(bytes)
         }
-        Ok(())
+    }
+
+    pub fn reserve_minor(&mut self, vals: usize) {
+        if self.minor_pool.left < vals {
+            self.collect_minor()
+        }
     }
 }

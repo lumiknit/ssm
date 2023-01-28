@@ -54,12 +54,16 @@ impl Pool {
         unsafe { Tup(self.ptr.add(offset as usize)) }
     }
 
+    pub fn alloc_unchecked(&mut self, words: usize) -> *mut usize {
+        self.left -= words;
+        unsafe { self.ptr.add(self.left as usize) }
+    }
+
     pub fn alloc(&mut self, words: usize) -> Option<*mut usize> {
         if self.left < words {
             return None;
         }
-        self.left -= words;
-        unsafe { Some(self.ptr.add(self.left as usize)) }
+        Some(self.alloc_unchecked(words))
     }
 
     #[inline(always)]
@@ -79,10 +83,24 @@ impl Pool {
         Some(tup)
     }
 
+    pub fn alloc_short_unchecked(&mut self, words: usize, tag: usize) -> Tup {
+        let ptr = self.alloc_unchecked(Tup::words_from_words(words));
+        let tup = Tup(ptr);
+        tup.set_header(Hd::short(words as usize, tag as usize));
+        tup
+    }
+
     pub fn alloc_long(&mut self, bytes: usize) -> Option<Tup> {
         let ptr = self.alloc(Tup::words_from_bytes(bytes))?;
         let tup = Tup(ptr);
         tup.set_header(Hd::long(bytes as usize));
         Some(tup)
+    }
+
+    pub fn alloc_long_unchecked(&mut self, bytes: usize) -> Tup {
+        let ptr = self.alloc_unchecked(Tup::words_from_bytes(bytes));
+        let tup = Tup(ptr);
+        tup.set_header(Hd::long(bytes as usize));
+        tup
     }
 }
