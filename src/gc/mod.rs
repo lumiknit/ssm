@@ -23,7 +23,7 @@ pub struct Mem {
     // Objects which does not contain any other pointers managed by GC
     pub major_leaves: *mut usize,
     // Other objects
-    pub major_shorts: *mut usize,
+    pub major_nodes: *mut usize,
 
     pub major_allocated: usize,
     pub major_limit: usize,
@@ -39,7 +39,7 @@ impl Drop for Mem {
         // Drop lists
         let im: *mut *mut usize = &mut self.major_immortal;
         let le: *mut *mut usize = &mut self.major_leaves;
-        let sh: *mut *mut usize = &mut self.major_shorts;
+        let sh: *mut *mut usize = &mut self.major_nodes;
         for lst in [im, le, sh].into_iter() {
             unsafe {
                 while !(*lst).is_null() {
@@ -62,7 +62,7 @@ impl Mem {
             minor_pool: Pool::new(minor_pool_size),
             major_immortal: ptr::null_mut(),
             major_leaves: ptr::null_mut(),
-            major_shorts: ptr::null_mut(),
+            major_nodes: ptr::null_mut(),
             major_allocated: 0,
             major_limit: 0,
         };
@@ -153,7 +153,7 @@ impl Mem {
 
     pub fn move_minor_to_major(&mut self) {
         // First, record last short list
-        let old_major_shorts = self.major_shorts;
+        let old_major_nodes = self.major_nodes;
         // First, copy all marked objects to major heap
         // and write new address into old tuple
         unsafe {
@@ -178,8 +178,8 @@ impl Mem {
             }
         }
         // Traverse all short list and re-addressing
-        let mut tup = Tup(self.major_shorts);
-        while !tup.0.is_null() && tup.0 != old_major_shorts {
+        let mut tup = Tup(self.major_nodes);
+        while !tup.0.is_null() && tup.0 != old_major_nodes {
             let hd = tup.header();
             let words = hd.short_words();
             for i in 0..words {
@@ -214,7 +214,7 @@ impl Mem {
         // Traverse object list and free unmarked objects,
         // also unmark marked objects
         let leaves: *mut *mut usize = &mut self.major_leaves;
-        let shorts: *mut *mut usize = &mut self.major_shorts;
+        let shorts: *mut *mut usize = &mut self.major_nodes;
         for mut lst in [leaves, shorts].into_iter() {
             loop {
                 unsafe {
@@ -261,7 +261,7 @@ impl Mem {
     pub fn alloc_major_short(&mut self, words: usize, tag: usize) -> Tup {
         let tup_words = Tup::words_from_words(words);
         self.major_allocated = self.major_allocated.saturating_add(tup_words);
-        unsafe { alloc_major_short(&mut self.major_shorts, words, tag) }
+        unsafe { alloc_major_short(&mut self.major_nodes, words, tag) }
     }
 
     pub fn alloc_short(&mut self, words: usize, tag: usize) -> Tup {
