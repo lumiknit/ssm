@@ -24,8 +24,8 @@ pub struct VMConfig {
     // Memory
 
     // Initial size (in words) of global and stack
-    pub global_initial_vals: val::usize,
-    pub stack_initial_vals: val::usize,
+    pub global_initial_vals: usize,
+    pub stack_initial_vals: usize,
 
     // Initial size (in bytes) of minor and major pools
     pub minor_pool_initial_bytes: usize,
@@ -38,7 +38,6 @@ impl VMConfig {
             self.global_initial_vals,
             self.stack_initial_vals,
             self.minor_pool_initial_bytes,
-            self.major_pool_initial_bytes,
         );
         let codes = code::Codes::new();
         VM {

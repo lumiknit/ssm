@@ -34,6 +34,22 @@ struct MarkState {
     marked: Vec<Tup>,
 }
 
+impl Drop for Mem {
+    fn drop(&mut self) {
+        // Drop lists
+        let im: *mut *mut usize = &mut self.major_immortal;
+        let le: *mut *mut usize = &mut self.major_leaves;
+        let sh: *mut *mut usize = &mut self.major_shorts;
+        for lst in [im, le, sh].into_iter() {
+            unsafe {
+                while !(*lst).is_null() {
+                    self.major_allocated -= dealloc_major_next(lst);
+                }
+            }
+        }
+    }
+}
+
 impl Mem {
     pub fn new(
         global_initial_vals: usize,
@@ -58,11 +74,10 @@ impl Mem {
         self.major_limit = self.major_allocated + self.minor_pool.words * 4;
     }
 
-    fn mark_val(
-        val: Val,
-        state: &mut MarkState,
-        markable_ptr: &dyn Fn(*mut usize) -> bool,
-    ) {
+    fn mark_val<F>(val: Val, state: &mut MarkState, markable_ptr: F)
+    where
+        F: Fn(*mut usize) -> bool,
+    {
         if val.is_gc_ptr() {
             let tup = Tup::from_val(val);
             if markable_ptr(tup.0) && tup.mark(Hd::COLOR_BLACK) {
