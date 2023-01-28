@@ -234,45 +234,29 @@ impl Hd {
 
     #[inline(always)]
     pub fn bytes(self) -> usize {
-        /* Must equivalent with
-         * if self.is_long() {
-         *     self.long_bytes()
-         * } else {
-         *     self.short_words() * WORD_SIZE
-         * } */
-        let is_long_bit: usize =
-            (self.0 & Self::LONG_BIT) >> Self::LONG_BIT_SHIFT;
-        let long_mask = is_long_bit * usize::MAX;
-        let short_bytes = self.short_words() * WORD_SIZE;
-        (short_bytes & !long_mask) | (self.long_bytes() & long_mask)
+        if self.is_long() {
+            self.long_bytes()
+        } else {
+            self.short_words() * WORD_SIZE
+        }
     }
 
     #[inline(always)]
     pub fn words(self) -> usize {
-        /* Must equivalent with
-         * if self.is_long() {
-         *     self.long_words()
-         * } else {
-         *     self.short_words()
-         * } */
-        let is_long_bit: usize =
-            (self.0 & Self::LONG_BIT) >> Self::LONG_BIT_SHIFT;
-        let long_mask = is_long_bit * usize::MAX;
-        (self.short_words() & !long_mask) | (self.long_words() & long_mask)
+        if self.is_long() {
+            self.long_words()
+        } else {
+            self.short_words()
+        }
     }
 
     #[inline(always)]
     pub fn len(self) -> usize {
-        /* Must equivalent with
-         * if self.is_long() {
-         *     self.long_bytes()
-         * } else {
-         *     self.short_words()
-         * } */
-        let is_long_bit: usize =
-            (self.0 & Self::LONG_BIT) >> Self::LONG_BIT_SHIFT;
-        let long_mask = is_long_bit * usize::MAX;
-        (self.short_words() & !long_mask) | (self.long_bytes() & long_mask)
+        if self.is_long() {
+            self.long_bytes()
+        } else {
+            self.short_words()
+        }
     }
 
     #[inline(always)]
