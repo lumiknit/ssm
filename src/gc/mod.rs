@@ -40,7 +40,7 @@ impl Mem {
         stack_initial_vals: usize,
         minor_pool_size: usize,
     ) -> Mem {
-        Mem {
+        let mut this = Mem {
             global: Vec::with_capacity(global_initial_vals),
             stack: Vec::with_capacity(stack_initial_vals),
             minor_pool: Pool::new(minor_pool_size),
@@ -48,11 +48,13 @@ impl Mem {
             major_leaves: ptr::null_mut(),
             major_shorts: ptr::null_mut(),
             major_allocated: 0,
-            major_limit: minor_pool_size * 4,
-        }
+            major_limit: 0,
+        };
+        this.update_major_limit();
+        this
     }
 
-    pub fn update_major_pool_limit(&mut self) {
+    pub fn update_major_limit(&mut self) {
         self.major_limit = self.major_allocated + self.minor_pool.words * 4;
     }
 
@@ -193,14 +195,33 @@ impl Mem {
 
     pub fn collect_major(&mut self) {
         // Run marking phase
-        let marked_words = self.mark_major();
+        let _marked_words = self.mark_major();
         // Traverse object list and free unmarked objects,
         // also unmark marked objects
-        unimplemented!();
+        let leaves: *mut *mut usize = &mut self.major_leaves;
+        let shorts: *mut *mut usize = &mut self.major_shorts;
+        for mut lst in [leaves, shorts].into_iter() {
+            loop {
+                unsafe {
+                    let next = *lst;
+                    let next_tup = Tup(next);
+                    if next.is_null() {
+                        break;
+                    } else if next_tup.header().is_white() {
+                        self.major_allocated -= dealloc_major_next(lst);
+                    } else {
+                        next_tup.unmark();
+                        lst = next_tup.next_ptr::<*mut usize>();
+                    }
+                }
+            }
+        }
         // Move marked object in minor heap to major heap
         self.move_minor_to_major();
         // Rewind pointer
         self.minor_pool.rewind();
+        // Adjust next limit
+        self.update_major_limit();
     }
 
     pub fn collect_minor(&mut self) {

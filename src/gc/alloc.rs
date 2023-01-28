@@ -80,9 +80,11 @@ pub unsafe fn alloc_major_long(tup_list: &mut *mut usize, bytes: usize) -> Tup {
     Tup(ptr)
 }
 
-pub unsafe fn dealloc_major_next(tup_list: &mut *mut usize) {
+pub unsafe fn dealloc_major_next(tup_list: *mut *mut usize) -> usize {
     let next = Tup(*tup_list);
     let next_next = next.next();
     *tup_list = next_next.0;
-    dealloc_words(next.0.sub(1), next.header().words() + 1);
+    let words = next.header().words();
+    dealloc_words(next.0.sub(1), words + 1);
+    words
 }
