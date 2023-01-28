@@ -2,20 +2,30 @@ use crate::gc::val::*;
 
 use std::alloc::*;
 
-pub unsafe fn alloc_bytes(bytes: usize) -> *mut u8 {
-    let layout = Layout::from_size_align(bytes, WORD_SIZE).unwrap();
-    let ptr = alloc(layout);
-    if ptr.is_null() {
-        handle_alloc_error(layout);
-    }
-    ptr
-}
-
-pub unsafe fn alloc_words(words: usize) -> *mut usize {
+#[inline(always)]
+unsafe fn words_layout(words: usize) -> Layout {
     let bytes = words
         .checked_mul(WORD_SIZE)
         .expect("Allocation size overflow");
-    alloc_bytes(bytes) as *mut usize
+    Layout::from_size_align_unchecked(bytes, WORD_SIZE)
+}
+
+#[inline(always)]
+pub unsafe fn alloc_words(words: usize) -> *mut usize {
+    let ptr = alloc(words_layout(words));
+    if ptr.is_null() {
+        handle_alloc_error(words_layout(words));
+    }
+    ptr as *mut usize
+}
+
+#[inline(always)]
+pub unsafe fn alloc_bytes(bytes: usize) -> *mut u8 {
+    let words = bytes
+        .checked_add(WORD_SIZE - 1)
+        .expect("Allocation size overflow")
+        / WORD_SIZE;
+    alloc_words(words) as *mut u8
 }
 
 pub unsafe fn realloc_words(
@@ -23,31 +33,28 @@ pub unsafe fn realloc_words(
     old_words: usize,
     new_words: usize,
 ) -> *mut usize {
-    let old_bytes = old_words
-        .checked_mul(WORD_SIZE)
-        .expect("Allocation size overflow");
     let new_bytes = new_words
         .checked_mul(WORD_SIZE)
         .expect("Allocation size overflow");
-    let layout = Layout::from_size_align(old_bytes, WORD_SIZE).unwrap();
-    let ptr = realloc(ptr as *mut u8, layout, new_bytes);
+    let ptr = realloc(ptr as *mut u8, words_layout(old_words), new_bytes);
     if ptr.is_null() {
-        handle_alloc_error(layout);
+        handle_alloc_error(words_layout(old_words));
     }
     ptr as *mut usize
 }
 
-pub unsafe fn dealloc_bytes(ptr: *mut u8, bytes: usize) {
-    let layout = Layout::from_size_align(bytes, WORD_SIZE).unwrap();
-    dealloc(ptr, layout);
+#[inline(always)]
+pub unsafe fn dealloc_words(ptr: *mut usize, words: usize) {
+    dealloc(ptr as *mut u8, words_layout(words));
 }
 
-pub unsafe fn dealloc_words(ptr: *mut usize, words: usize) {
-    let bytes = words
-        .checked_mul(WORD_SIZE)
-        .expect("Deallocation size overflow");
-    let layout = Layout::from_size_align(bytes, WORD_SIZE).unwrap();
-    dealloc(ptr as *mut u8, layout);
+#[inline(always)]
+pub unsafe fn dealloc_bytes(ptr: *mut u8, bytes: usize) {
+    let words = bytes
+        .checked_add(WORD_SIZE - 1)
+        .expect("Allocation size overflow")
+        / WORD_SIZE;
+    dealloc_words(ptr as *mut usize, words);
 }
 
 // Helper for major allocation
@@ -57,26 +64,25 @@ pub unsafe fn alloc_major_short(
     tag: usize,
 ) -> Tup {
     let ptr = alloc_words(words + 1);
-    ptr.write(*tup_list as usize);
+    ptr.write((*tup_list) as usize);
     *tup_list = ptr;
-    ptr.add(1).write(Hd::short(words, tag).0);
-    Tup(ptr.add(1))
+    let ptr = ptr.add(1);
+    ptr.write(Hd::short(words, tag).0);
+    Tup(ptr)
 }
 
 pub unsafe fn alloc_major_long(tup_list: &mut *mut usize, bytes: usize) -> Tup {
     let ptr = alloc_bytes(WORD_SIZE + bytes) as *mut usize;
     ptr.write(*tup_list as usize);
     *tup_list = ptr;
-    ptr.add(1).write(Hd::long(bytes).0);
-    Tup(ptr.add(1))
+    let ptr = ptr.add(1);
+    ptr.write(Hd::long(bytes).0);
+    Tup(ptr)
 }
 
 pub unsafe fn dealloc_major_next(tup_list: &mut *mut usize) {
     let next = Tup(*tup_list);
     let next_next = next.next();
     *tup_list = next_next.0;
-    dealloc_bytes(
-        (next.0.sub(1)) as *mut u8,
-        next.header().bytes() + WORD_SIZE,
-    );
+    dealloc_words(next.0.sub(1), next.header().words() + 1);
 }
