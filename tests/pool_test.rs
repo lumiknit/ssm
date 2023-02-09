@@ -1,5 +1,4 @@
 use ssm::gc::pool::Pool;
-use ssm::gc::*;
 
 #[test]
 fn create_pool() {
