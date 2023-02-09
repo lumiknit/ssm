@@ -68,7 +68,6 @@ pub unsafe fn alloc_major_short(
     let ptr = ptr.add(1);
     *tup_list = ptr;
     ptr.write(Hd::short(words, tag).0);
-    println!("+SHRT {:?}", ptr);
     Tup(ptr)
 }
 
@@ -78,7 +77,6 @@ pub unsafe fn alloc_major_long(tup_list: &mut *mut usize, bytes: usize) -> Tup {
     let ptr = ptr.add(1);
     *tup_list = ptr;
     ptr.write(Hd::long(bytes).0);
-    println!("+LONG {:?}", ptr);
     Tup(ptr)
 }
 

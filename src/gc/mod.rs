@@ -43,7 +43,6 @@ impl Drop for Mem {
         for lst in [im, le, sh].into_iter() {
             unsafe {
                 while !(*lst).is_null() {
-                    println!("DROP {:?}", *lst);
                     self.major_allocated -= dealloc_major_next(lst);
                 }
             }
@@ -169,21 +168,17 @@ impl Mem {
                     } else {
                         self.alloc_major_short(hd.short_words(), hd.tag())
                     };
-                    println!("Move {:?} -> {:?}", tup.0, new_tup.0);
-                    println!("     {:?}", hd.words());
                     ptr::copy_nonoverlapping::<usize>(
                         ptr.add(1),
                         new_tup.0.add(1),
                         hd.words(),
                     );
                     tup.0.write(new_tup.0 as usize);
-                    println!("Write done");
                 }
                 ptr = ptr.add(Tup::words_from_words(hd.words()));
             }
         }
         // Traverse all short list and re-addressing
-        println!("Traverse short list");
         let mut tup = Tup(self.major_nodes);
         while !tup.0.is_null() && tup.0 != old_major_nodes {
             let hd = tup.header();
@@ -198,7 +193,6 @@ impl Mem {
             tup = tup.next();
         }
         // Traverse all global & stack and re-addressing
-        println!("Traverse stacks");
         for val in self.global.iter_mut() {
             if let Some(new) =
                 Self::get_new_address(&self.minor_pool, Val(*val))
@@ -216,7 +210,6 @@ impl Mem {
     }
 
     pub fn collect_major(&mut self) {
-        println!("[NOTE] MAJOR");
         // Run marking phase
         let _marked_words = self.mark_major();
         // Traverse object list and free unmarked objects,
@@ -248,7 +241,6 @@ impl Mem {
     }
 
     pub fn collect_minor(&mut self) {
-        println!("[NOTE] MINOR");
         // If major heap is full, run major collect
         if self.major_allocated >= self.major_limit {
             return self.collect_major();
@@ -256,10 +248,8 @@ impl Mem {
         // Run marking phase
         let _marked_words = self.mark_minor();
         // Move marked objects to major heap
-        println!("[NOTE] MOVE");
         self.move_minor_to_major();
         // Rewind pointer
-        println!("[NOTE] REWIND");
         self.minor_pool.rewind();
     }
 
