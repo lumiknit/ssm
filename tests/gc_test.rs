@@ -213,7 +213,7 @@ fn major_gc_01() {
 #[test]
 fn gc_boom_00() {
     let word_size = std::mem::size_of::<usize>();
-    let mut mem = Mem::new(16, 16, 32 * word_size);
+    let mut mem = Mem::new(16, 16, 256 * word_size);
     mem.stack.push(Val::from_uint(42).0);
     mem.stack.push(Val::from_uint(42).0);
     mem.stack.push(Val::from_uint(42).0);
@@ -222,27 +222,36 @@ fn gc_boom_00() {
     let v = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs();
     let z = i32::MAX as u64;
     let mut acc = 0;
-    for _i in 0..100 {
-        println!("i = {}", _i);
+    for _i in 0..10000000 {
         acc = (acc + v) % z;
         match acc % 3 {
             0 => {
                 // Just create a trash
-                let _tup = mem.alloc_short(4, 0);
+                let tup = mem.alloc_short(4, 0);
+                for i in 0..4 {
+                    tup.set_val(i, Val::from_uint(0))
+                }
             },
             1 => {
                 // Create a non-garbage
                 let tup = mem.alloc_short(5, 0);
+                for i in 0..5 {
+                    tup.set_val(i, Val::from_uint(0))
+                }
                 mem.stack[(acc % 5) as usize] = tup.to_val().0;
             },
             _ => {
                 // Create a non-garbage and insert into rand value
                 let tup = mem.alloc_short(7, 0);
+                for i in 0..7 {
+                    tup.set_val(i, Val::from_uint(0))
+                }
                 let val = Val(mem.stack[(acc % 4) as usize]);
                 tup.set_val(0, val);
                 mem.stack[(acc % 4) as usize] = tup.to_val().0;
             },
         }
-        
     }
+    println!("Minor.left = {}", mem.minor_pool.left);
+    println!("Major.allocated = {}", mem.major_allocated);
 }

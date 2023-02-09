@@ -71,7 +71,7 @@ impl Mem {
     }
 
     pub fn update_major_limit(&mut self) {
-        self.major_limit = self.major_allocated + self.minor_pool.words * 4;
+        self.major_limit = self.major_allocated + self.minor_pool.words * 8;
     }
 
     fn mark_val<F>(val: Val, state: &mut MarkState, markable_ptr: F)
@@ -102,7 +102,7 @@ impl Mem {
             marked_words: 0,
             marked: Vec::new(),
         };
-        let markable_ptr = |_| true;
+        let markable_ptr = |ptr: *mut usize| !ptr.is_null();
         // Mark global stack
         for val in self.global.iter() {
             Self::mark_val(Val(*val), &mut state, &markable_ptr);
@@ -206,7 +206,6 @@ impl Mem {
     }
 
     pub fn collect_major(&mut self) {
-        println!("[MAJOR]");
         // Run marking phase
         let _marked_words = self.mark_major();
         // Traverse object list and free unmarked objects,
@@ -238,7 +237,6 @@ impl Mem {
     }
 
     pub fn collect_minor(&mut self) {
-        println!("[MINOR]");
         // If major heap is full, run major collect
         if self.major_allocated >= self.major_limit {
             return self.collect_major();
