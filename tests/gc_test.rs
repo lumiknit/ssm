@@ -80,7 +80,7 @@ fn minor_gc_01() {
     // GC invoked
     mem.collect_minor();
     assert_eq!(mem.minor_pool.left, 32);
-    //assert_eq!(mem.pools[1].left, 118);
+    assert_eq!(mem.major_allocated, 10);
     for i in 0..2 {
         let tup = Tup::from_val(Val(mem.stack[i]));
         assert!(!mem.minor_pool.own(Val(mem.stack[i]).to_gc_ptr()));
@@ -88,11 +88,6 @@ fn minor_gc_01() {
         assert!(tup.header().is_white());
         assert!(!tup.is_long());
         assert!(tup.len() == 4);
-    }
-    unsafe {
-        let p0 = Val(mem.stack[0]).to_gc_ptr::<usize>();
-        let p1 = Val(mem.stack[1]).to_gc_ptr::<usize>();
-        assert!(p0.add(5) == p1 || p1.add(5) == p0);
     }
 }
 
@@ -107,17 +102,23 @@ fn minor_gc_02() {
     // Create non-garbage
     let v = mem.alloc_short(4, 42).to_val();
     mem.stack.push(v.0);
+    println!("tup_v = {:?}", Tup::from_val(v).0);
     for i in 0..4 {
-        Tup::from_val(v).set_val(i, Val(i + 123));
+        Tup::from_val(v).set_val(i, Val::from_uint(i + 123));
+        println!("{}", Tup::from_val(v).val(i));
     }
+    println!("B");
     // Create lots of garbage
     for _i in 0..10 {
         mem.alloc_short(4, 0);
         mem.alloc_long(41);
     }
+    println!("C");
     // Create non-garbatge
     let w = mem.alloc_long(56).to_val();
+    assert!(Tup::from_val(w).is_long());
     mem.stack.push(w.0);
+    println!("D");
     let msg = "Hello, World!";
     unsafe {
         for i in 0..msg.len() {
@@ -131,13 +132,15 @@ fn minor_gc_02() {
     }
     // Check first value
     let tup_v = Tup::from_val(Val(mem.stack[0]));
+    println!("tup_v = {:?}", tup_v.0);
     assert!(!tup_v.is_long());
     assert!(tup_v.tag() == 42);
     for i in 0..4 {
-        assert!(tup_v.val(i) == Val(i + 123));
+        println!("{}", tup_v.val(i));
+        assert!(tup_v.val(i) == Val::from_uint(i + 123));
     }
     // Check second value
-    let tup_w = Tup::from_val(Val(mem.stack[0]));
+    let tup_w = Tup::from_val(Val(mem.stack[1]));
     assert!(tup_w.is_long());
     for i in 0..msg.len() {
         assert_eq!(tup_w.byte_at(i), msg.as_bytes()[i]);

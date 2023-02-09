@@ -65,24 +65,27 @@ pub unsafe fn alloc_major_short(
 ) -> Tup {
     let ptr = alloc_words(words + 1);
     ptr.write((*tup_list) as usize);
-    *tup_list = ptr;
     let ptr = ptr.add(1);
+    *tup_list = ptr;
     ptr.write(Hd::short(words, tag).0);
+    println!("+SHRT {:?}", ptr);
     Tup(ptr)
 }
 
 pub unsafe fn alloc_major_long(tup_list: &mut *mut usize, bytes: usize) -> Tup {
     let ptr = alloc_bytes(WORD_SIZE + bytes) as *mut usize;
     ptr.write(*tup_list as usize);
-    *tup_list = ptr;
     let ptr = ptr.add(1);
+    *tup_list = ptr;
     ptr.write(Hd::long(bytes).0);
+    println!("+LONG {:?}", ptr);
     Tup(ptr)
 }
 
 pub unsafe fn dealloc_major_next(tup_list: *mut *mut usize) -> usize {
     let next = Tup(*tup_list);
     let next_next = next.next();
+    println!("nn {:?} {}", next_next, next_next.0.is_null());
     *tup_list = next_next.0;
     let words = next.header().words();
     dealloc_words(next.0.sub(1), words + 1);
