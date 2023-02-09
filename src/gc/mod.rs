@@ -170,6 +170,7 @@ impl Mem {
                         self.alloc_major_short(hd.short_words(), hd.tag())
                     };
                     println!("Move {:?} -> {:?}", tup.0, new_tup.0);
+                    println!("     {:?}", hd.words());
                     ptr::copy_nonoverlapping::<usize>(
                         ptr.add(1),
                         new_tup.0.add(1),
