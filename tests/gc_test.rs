@@ -1,6 +1,8 @@
 use ssm::gc::val::*;
 use ssm::gc::*;
 
+use std::time::*;
+
 #[test]
 fn create_mem() {
     let _mem = Mem::new(128, 128, 1024);
@@ -168,13 +170,79 @@ fn major_gc_00() {
     // GC invoked
     mem.collect_minor();
     assert_eq!(mem.minor_pool.left, 32);
+    assert_eq!(mem.major_allocated, 10);
     // Clean-up all stacks
     mem.stack.pop();
     mem.global.pop();
     // Run minor
     mem.collect_minor();
     assert_eq!(mem.minor_pool.left, 32);
+    assert_eq!(mem.major_allocated, 10);
     // Run Major
     mem.collect_major();
     assert_eq!(mem.minor_pool.left, 32);
+    assert_eq!(mem.major_allocated, 0);
+}
+
+#[test]
+fn major_gc_01() {
+    let word_size = std::mem::size_of::<usize>();
+    let mut mem = Mem::new(16, 16, 16 * word_size);
+    // Create a large garbage in major pool;
+    mem.alloc_long(word_size * 20);
+    assert_eq!(mem.minor_pool.left, 16);
+    assert_eq!(mem.major_allocated, 21);
+    // Create a large garbage in major pool;
+    mem.alloc_long(word_size * 100);
+    assert_eq!(mem.minor_pool.left, 16);
+    assert_eq!(mem.major_allocated, 122);
+    // Create a short garbage
+    mem.alloc_short(15, 1);
+    assert_eq!(mem.minor_pool.left, 0);
+    assert_eq!(mem.major_allocated, 122);
+    // Create 
+    mem.alloc_short(15, 1);
+    assert_eq!(mem.minor_pool.left, 0);
+    assert_eq!(mem.major_allocated, 0);
+    // Create 
+    mem.alloc_short(7, 1);
+    assert_eq!(mem.minor_pool.left, 8);
+    assert_eq!(mem.major_allocated, 0);
+}
+
+#[test]
+fn gc_boom_00() {
+    let word_size = std::mem::size_of::<usize>();
+    let mut mem = Mem::new(16, 16, 32 * word_size);
+    mem.stack.push(Val::from_uint(42).0);
+    mem.stack.push(Val::from_uint(42).0);
+    mem.stack.push(Val::from_uint(42).0);
+    mem.stack.push(Val::from_uint(42).0);
+    mem.stack.push(Val::from_uint(42).0);
+    let v = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs();
+    let z = i32::MAX as u64;
+    let mut acc = 0;
+    for _i in 0..100 {
+        println!("i = {}", _i);
+        acc = (acc + v) % z;
+        match acc % 3 {
+            0 => {
+                // Just create a trash
+                let _tup = mem.alloc_short(4, 0);
+            },
+            1 => {
+                // Create a non-garbage
+                let tup = mem.alloc_short(5, 0);
+                mem.stack[(acc % 5) as usize] = tup.to_val().0;
+            },
+            _ => {
+                // Create a non-garbage and insert into rand value
+                let tup = mem.alloc_short(7, 0);
+                let val = Val(mem.stack[(acc % 4) as usize]);
+                tup.set_val(0, val);
+                mem.stack[(acc % 4) as usize] = tup.to_val().0;
+            },
+        }
+        
+    }
 }

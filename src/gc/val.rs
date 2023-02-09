@@ -318,7 +318,7 @@ impl Tup {
             self.0.write(hd.marked(color).0);
             // Return true if the tuple may point unmarked objects
             // (i.e. white short)
-            hd.is_white() && !hd.is_long()
+            hd.is_white()
         }
     }
 

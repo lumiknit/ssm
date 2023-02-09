@@ -78,26 +78,21 @@ impl Mem {
     where
         F: Fn(*mut usize) -> bool,
     {
-        if val.is_gc_ptr() {
-            let tup = Tup::from_val(val);
-            if markable_ptr(tup.0) && tup.mark(Hd::COLOR_BLACK) {
+        if !val.is_gc_ptr() { return; }
+        let tup = Tup::from_val(val);
+        if !markable_ptr(tup.0) || !tup.mark(Hd::COLOR_BLACK) { return; }
+        state.marked_words += tup.words();
+        if tup.is_long() { return; }
+        state.marked.push(tup);
+        while let Some(tup) = state.marked.pop() {
+            for i in 0..tup.header().short_words() {
+                let val = tup.val(i);
+                if !val.is_gc_ptr() { continue; }
+                let tup = Tup::from_val(val);
+                if !markable_ptr(tup.0) || !tup.mark(Hd::COLOR_BLACK) { continue; }
                 state.marked_words += tup.words();
+                if tup.is_long() { continue; }
                 state.marked.push(tup);
-                while let Some(tup) = state.marked.pop() {
-                    let hd = tup.header();
-                    let words = hd.short_words();
-                    for i in 0..words {
-                        let val = tup.val(i);
-                        if val.is_gc_ptr() {
-                            let tup = Tup::from_val(val);
-                            if markable_ptr(tup.0) && tup.mark(Hd::COLOR_BLACK)
-                            {
-                                state.marked_words += tup.words();
-                                state.marked.push(tup);
-                            }
-                        }
-                    }
-                }
             }
         }
     }
@@ -162,20 +157,21 @@ impl Mem {
             while ptr < lim {
                 let tup = Tup(ptr);
                 let hd = tup.header();
+                let words = hd.words();
                 if !hd.is_white() {
                     let new_tup = if hd.is_long() {
                         self.alloc_major_long(hd.long_bytes())
                     } else {
-                        self.alloc_major_short(hd.short_words(), hd.tag())
+                        self.alloc_major_short(words, hd.tag())
                     };
                     ptr::copy_nonoverlapping::<usize>(
                         ptr.add(1),
                         new_tup.0.add(1),
-                        hd.words(),
+                        words,
                     );
                     tup.0.write(new_tup.0 as usize);
                 }
-                ptr = ptr.add(Tup::words_from_words(hd.words()));
+                ptr = ptr.add(Tup::words_from_words(words));
             }
         }
         // Traverse all short list and re-addressing
@@ -210,6 +206,7 @@ impl Mem {
     }
 
     pub fn collect_major(&mut self) {
+        println!("[MAJOR]");
         // Run marking phase
         let _marked_words = self.mark_major();
         // Traverse object list and free unmarked objects,
@@ -241,6 +238,7 @@ impl Mem {
     }
 
     pub fn collect_minor(&mut self) {
+        println!("[MINOR]");
         // If major heap is full, run major collect
         if self.major_allocated >= self.major_limit {
             return self.collect_major();
@@ -291,13 +289,6 @@ impl Mem {
         // If minor pool is too small to contain the tuple,
         // try to allocate in major heap
         if self.minor_pool.words < tup_words {
-            self.alloc_major_long(bytes);
-            // If some objects exist in minor heap, try to collect them
-            // for object age invariant
-            if self.minor_pool.left < self.minor_pool.words {
-                self.collect_minor();
-            }
-            // Allocate object in major heap
             self.alloc_major_long(bytes)
         } else {
             // Try to allocate in minor heap

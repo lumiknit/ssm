@@ -84,7 +84,7 @@ pub unsafe fn dealloc_major_next(tup_list: *mut *mut usize) -> usize {
     let next = Tup(*tup_list);
     let next_next = next.next();
     tup_list.write(next_next.0);
-    let words = next.header().words();
-    dealloc_words(next.0.sub(1), words + 1);
+    let words = Tup::words_from_words(next.header().words());
+    dealloc_words(next.0.sub(1), 1 + words);
     words
 }
