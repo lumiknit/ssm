@@ -24,21 +24,19 @@ pub struct VMConfig {
     // Memory
 
     // Initial size (in words) of global and stack
-    pub global_initial_vals: usize,
-    pub stack_initial_vals: usize,
-
-    // Initial size (in bytes) of minor and major pools
-    pub minor_pool_initial_bytes: usize,
-    pub major_pool_initial_bytes: usize,
+    pub global_initial_words: usize,
+    pub stack_initial_words: usize,
+    pub minor_pool_bytes: usize,
+    pub major_gc_threshold_percent: usize,
 }
 
 impl VMConfig {
     pub fn build(self) -> VM {
         let mem = Mem::new(
-            self.global_initial_vals,
-            self.stack_initial_vals,
-            self.minor_pool_initial_bytes,
-        );
+            self.global_initial_words,
+            self.stack_initial_words,
+            self.minor_pool_bytes,
+            self.major_gc_threshold_percent);
         let codes = code::Codes::new();
         VM {
             mem: mem,

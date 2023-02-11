@@ -5,12 +5,12 @@ use std::time::*;
 
 #[test]
 fn create_mem() {
-    let _mem = Mem::new(128, 128, 1024);
+    let _mem = Mem::new(128, 128, 1024, 120);
 }
 
 #[test]
 fn allocate_short() {
-    let mut mem = Mem::new(128, 128, 1024);
+    let mut mem = Mem::new(128, 128, 1024, 120);
     let tup = mem.alloc_short(4, 12);
     let hd = tup.header();
     assert!(!hd.is_long());
@@ -20,7 +20,7 @@ fn allocate_short() {
 
 #[test]
 fn allocate_shorts() {
-    let mut mem = Mem::new(128, 128, 1024);
+    let mut mem = Mem::new(128, 128, 1024, 120);
     let tup1 = mem.alloc_short(4, 1);
     let tup2 = mem.alloc_short(4, 2);
     for i in 0..4 {
@@ -47,7 +47,7 @@ fn allocate_shorts() {
 #[test]
 fn minor_gc_00() {
     let word_size = std::mem::size_of::<usize>();
-    let mut mem = Mem::new(16, 16, 32 * word_size);
+    let mut mem = Mem::new(16, 16, 32 * word_size, 120);
     mem.alloc_short(4, 1);
     assert_eq!(mem.minor_pool.left, 27);
     mem.alloc_short(4, 1);
@@ -64,7 +64,7 @@ fn minor_gc_00() {
 #[test]
 fn minor_gc_01() {
     let word_size = std::mem::size_of::<usize>();
-    let mut mem = Mem::new(16, 16, 32 * word_size);
+    let mut mem = Mem::new(16, 16, 32 * word_size, 120);
     // Create a garbage
     mem.alloc_short(4, 41);
     assert_eq!(mem.minor_pool.left, 27);
@@ -96,7 +96,7 @@ fn minor_gc_01() {
 #[test]
 fn minor_gc_02() {
     let word_size = std::mem::size_of::<usize>();
-    let mut mem = Mem::new(16, 16, 32 * word_size);
+    let mut mem = Mem::new(16, 16, 32 * word_size, 120);
     for _i in 0..100 {
         mem.alloc_short(4, 0);
         mem.alloc_long(48);
@@ -152,7 +152,7 @@ fn minor_gc_02() {
 #[test]
 fn major_gc_00() {
     let word_size = std::mem::size_of::<usize>();
-    let mut mem = Mem::new(16, 16, 32 * word_size);
+    let mut mem = Mem::new(16, 16, 32 * word_size, 120);
     // Create a garbage
     mem.alloc_short(4, 41);
     assert_eq!(mem.minor_pool.left, 27);
@@ -187,7 +187,7 @@ fn major_gc_00() {
 #[test]
 fn major_gc_01() {
     let word_size = std::mem::size_of::<usize>();
-    let mut mem = Mem::new(16, 16, 16 * word_size);
+    let mut mem = Mem::new(16, 16, 16 * word_size, 120);
     // Create a large garbage in major pool;
     mem.alloc_long(word_size * 20);
     assert_eq!(mem.minor_pool.left, 16);
@@ -213,7 +213,7 @@ fn major_gc_01() {
 #[test]
 fn gc_boom_00() {
     let word_size = std::mem::size_of::<usize>();
-    let mut mem = Mem::new(16, 16, 256 * word_size);
+    let mut mem = Mem::new(16, 16, 256 * word_size, 120);
     mem.stack.push(Val::from_uint(42).0);
     mem.stack.push(Val::from_uint(42).0);
     mem.stack.push(Val::from_uint(42).0);
@@ -254,4 +254,37 @@ fn gc_boom_00() {
     }
     println!("Minor.left = {}", mem.minor_pool.left);
     println!("Major.allocated = {}", mem.major_allocated);
+}
+
+#[test]
+fn major_gc_limit_00() {
+    let word_size = std::mem::size_of::<usize>();
+    let minor_words = 32;
+    let mut mem = Mem::new(16, 16, minor_words * word_size, 120);
+    
+    // Check default size
+    assert_eq!(mem.major_limit, minor_words * 7);
+    
+    // Check update major
+    for size in [200, 1000, 100000, 5600000] {
+        mem.major_allocated = size;
+        mem.update_major_limit();
+        assert_eq!(mem.major_limit, ((size as f64) * 2.2) as usize);
+    }
+    
+    // Check min size
+    mem.major_allocated = minor_words / 8;
+    mem.update_major_limit();
+    assert_eq!(mem.major_limit, minor_words * 7);
+    
+    // Check overflow
+    mem.major_allocated = usize::MAX / 2;
+    mem.update_major_limit();
+    assert_eq!(mem.major_limit, usize::MAX);
+
+    // Check not-overflow
+    mem.major_gc_thresold_percent = 150;
+    mem.major_allocated = usize::MAX / 3;
+    mem.update_major_limit();
+    assert_eq!(mem.major_limit, mem.major_allocated * 2 + mem.major_allocated / 2);
 }

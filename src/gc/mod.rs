@@ -25,6 +25,7 @@ pub struct Mem {
     // Other objects
     pub major_nodes: *mut usize,
 
+    pub major_gc_thresold_percent: usize,
     pub major_allocated: usize,
     pub major_limit: usize,
 }
@@ -54,15 +55,24 @@ impl Mem {
     pub fn new(
         global_initial_vals: usize,
         stack_initial_vals: usize,
-        minor_pool_size: usize,
+        mut minor_pool_bytes: usize,
+        mut major_gc_threshold_percent: usize,
     ) -> Mem {
+        // Clip minor_pool_size
+        if minor_pool_bytes >= usize::MAX / 8 {
+            minor_pool_bytes = usize::MAX / 8;
+        }
+        if major_gc_threshold_percent >= 256 {
+            major_gc_threshold_percent = 255;
+        }
         let mut this = Mem {
             global: Vec::with_capacity(global_initial_vals),
             stack: Vec::with_capacity(stack_initial_vals),
-            minor_pool: Pool::new(minor_pool_size),
+            minor_pool: Pool::new(minor_pool_bytes),
             major_immortal: ptr::null_mut(),
             major_leaves: ptr::null_mut(),
             major_nodes: ptr::null_mut(),
+            major_gc_thresold_percent: major_gc_threshold_percent,
             major_allocated: 0,
             major_limit: 0,
         };
@@ -71,7 +81,31 @@ impl Mem {
     }
 
     pub fn update_major_limit(&mut self) {
-        self.major_limit = self.major_allocated + self.minor_pool.words * 8;
+        // If major_gc_threshold_percent is 0, disable major GC
+        if self.major_gc_thresold_percent == 0 {
+            self.major_limit = usize::MAX;
+            return;
+        }
+        // Calculate minimal pool size
+        // = min_pool_size * 7
+        let min_size = self.minor_pool.words.checked_mul(7)
+            .unwrap_or(usize::MAX);
+        // Calculate limit with percent-value
+        // new_limit = allocated * (1 + 0.01 * threshold_percent)
+        // e.g. threshold_percent = 150, limit ratio = 2.5
+        // Split allocated into two part to avoid overflow
+        let lo: usize = (self.major_allocated % 100)
+            * self.major_gc_thresold_percent
+            / 100;
+        let hi: usize = (self.major_allocated / 100)
+            .checked_mul(self.major_gc_thresold_percent)
+            .unwrap_or(usize::MAX);
+        // Add them
+        let additional_words = hi.checked_add(lo).unwrap_or(usize::MAX);
+        let new_limit = self.major_allocated
+            .checked_add(additional_words)
+            .unwrap_or(usize::MAX);
+        self.major_limit = usize::max(min_size, new_limit);
     }
 
     fn mark_val<F>(val: Val, state: &mut MarkState, markable_ptr: F)
