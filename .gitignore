@@ -1,2 +1,5 @@
 .vscode
 /target
+/rust/target
+*.o
+/ssm
