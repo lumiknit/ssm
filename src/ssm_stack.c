@@ -33,7 +33,7 @@ size_t pushStack(Stack* stack, ssmV value) {
   if (stack->top >= stack->size) {
     return 0;
   }
-  stack->data[stack->top++] = value;
+  stack->vals[stack->top++] = value;
   return stack->top;
 }
 
@@ -43,12 +43,12 @@ void pushStackForce(Stack** stack_ptr, ssmV value) {
     stack = extendStack(stack, stack->size * 2);
     *stack_ptr = stack;
   }
-  stack->data[stack->top++] = value;
+  stack->vals[stack->top++] = value;
 }
 
 ssmV popStack(Stack* stack) {
   if(stack->top == 0) {
     panic("Stack underflow");
   }
-  return stack->data[--stack->top];
+  return stack->vals[--stack->top];
 }

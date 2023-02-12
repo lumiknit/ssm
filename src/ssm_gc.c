@@ -104,12 +104,53 @@ static inline ssmT allocMajorShort(Mem* mem, ssmV tag, ssmV words) {
   return tup;
 }
 
-static void fullMarkPhase(Mem* mem) {
-  unimplemented();
+typedef int (*MarkableFn)(Mem*, ssmT);
+
+static void markVal(Mem *mem, ssmV val, MarkableFn markable) {
+  if(!ssmIsGCVal(val)) return;
+  ssmT tup = ssmVal2Tup(val);
+  if(!markable(mem, tup)) return;
+  const ssmV hd = ssmTHd(tup);
+  if(ssmHdColor(hd)) return;
+  ssmTHd(tup) = ssmHdMarked(hd);
+  if(ssmHdIsLong(hd)) return;
+  pushStackForce(&mem->mark_stack, val);
+  while(mem->mark_stack->top > 0) {
+    ssmT marked_tup = ssmVal2Tup(popStack(mem->mark_stack));
+    const ssmV words = ssmHdShortWords(ssmTHd(marked_tup));
+    ssmV i;
+    for(i = 0; i < words; i++) {
+      if(!ssmIsGCVal(ssmTElem(marked_tup, i))) continue;
+      ssmT tup = ssmVal2Tup(ssmTElem(marked_tup, i));
+      if(!markable(mem, tup)) continue;
+      const ssmV hd = ssmTHd(tup);
+      if(ssmHdColor(hd)) continue;
+      ssmTHd(tup) = ssmHdMarked(hd);
+      if(ssmHdIsLong(hd)) return;
+      pushStackForce(&mem->mark_stack, ssmTup2Val(tup));
+    }
+  }
 }
 
-static void minorMarkPhase(Mem* mem) {
-  unimplemented();
+static void markPhase(Mem* mem, MarkableFn markable) {
+  ssmV i;
+  // Mark global stack
+  for(i = 0; i < mem->global->top; i++) {
+    markVal(mem, mem->global->vals[i], markable);
+  }
+  // Mark stack
+  for(i = 0; i < mem->stack->top; i++) {
+    markVal(mem, mem->stack->vals[i], markable);
+  }
+}
+
+static int markableMajor(Mem* mem, ssmT tup) {
+  (void) mem;
+  return tup != NULL;
+}
+
+static int markableMinor(Mem* mem, ssmT tup) {
+  return inStack(mem->minor, tup);
 }
 
 static void freeUnmarkedMajor(Mem* mem) {
@@ -122,7 +163,7 @@ static void moveMinorToMajor(Mem* mem) {
 
 int fullGC(Mem* mem) {
   // Run marking phase
-  fullMarkPhase(mem);
+  markPhase(mem, markableMajor);
   // Traverse object list and free unmarked objects
   // also unmark all marked objects
   freeUnmarkedMajor(mem);
@@ -151,7 +192,7 @@ int minorGC(Mem* mem) {
     return fullGC(mem);
   }
   // Run marking phase
-  minorMarkPhase(mem);
+  markPhase(mem, markableMinor);
   // Move marked objects to major heap
   moveMinorToMajor(mem);
   // Rewind minor heap's top pointer (left)
@@ -174,7 +215,7 @@ ssmT newLongTup(Mem *mem, ssmV bytes) {
   }
   // Move top
   mem->minor->top -= size;
-  ssmT tup = ((ssmT)mem->minor->data) + mem->minor->top;
+  ssmT tup = ((ssmT)mem->minor->vals) + mem->minor->top;
   // Initialize tuple header
   ssmTHd(tup) = ssmLongHd(bytes);
   return tup;
@@ -198,7 +239,7 @@ ssmT newTup(Mem *mem, ssmV tag, ssmV words) {
   }
   // Move top
   mem->minor->top -= size;
-  ssmT tup = ((ssmT)mem->minor->data) + mem->minor->top;
+  ssmT tup = ((ssmT)mem->minor->vals) + mem->minor->top;
   // Initialize tuple header
   ssmTHd(tup) = ssmShortHd(tag, words);
   return tup;

@@ -32,15 +32,19 @@
 typedef struct Stack {
   size_t size;
   size_t top;
-  ssmV data[1];
+  ssmV vals[1];
 } Stack;
 
 Stack* newStack(size_t size);
 #define freeStack(stack) free(stack)
+// Note: extendStack does not guarantee the stack is aligned
 Stack* extendStack(Stack* stack, size_t size);
 size_t pushStack(Stack* stack, ssmV value);
 void pushStackForce(Stack** stack, ssmV value);
 ssmV popStack(Stack* stack);
+#define inStack(stack, ptr) \
+  ((stack)->vals <= (ptr) && \
+  (ptr) <= (stack)->vals + (stack)->size - 1)
 
 // GC
 
@@ -68,6 +72,9 @@ typedef struct Mem {
   // Statistics
   size_t minor_gc_count;
   size_t major_gc_count;
+
+  // GC template variables
+  Stack *mark_stack;
 } Mem;
 
 void initMem(Mem* mem,

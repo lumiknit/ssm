@@ -111,13 +111,13 @@ typedef ssmV* ssmT; // Tuple
 #define ssmHdTag(v) ((v) & SSM_TAG_MASK)
 #define ssmHdSize(v) (((v) & SSM_SIZE_MASK) >> SSM_SIZE_SHIFT)
 
-#define ssmHdLongBytes(v) ssmVLongSize(v)
-#define ssmHdLongWords(v) (ssmVLongSize(v) / SSM_WORD_SIZE)
-#define ssmHdShortBytes(v) (ssmVSize(v) * SSM_WORD_SIZE)
-#define ssmHdShortWords(v) ssmVSize(v)
+#define ssmHdLongBytes(v) ssmHdLongSize(v)
+#define ssmHdLongWords(v) (ssmHdLongSize(v) / SSM_WORD_SIZE)
+#define ssmHdShortBytes(v) (ssmHdSize(v) * SSM_WORD_SIZE)
+#define ssmHdShortWords(v) ssmHdSize(v)
 
-#define ssmHdBytes(v) (ssmVIsLong(v) ? ssmVLongBytes(v) : ssmVShortBytes(v))
-#define ssmHdWords(v) (ssmVIsLong(v) ? ssmVLongWords(v) : ssmVShortWords(v))
+#define ssmHdBytes(v) (ssmHdIsLong(v) ? ssmHdLongBytes(v) : ssmHdShortBytes(v))
+#define ssmHdWords(v) (ssmHdIsLong(v) ? ssmHdLongWords(v) : ssmHdShortWords(v))
 
 #define ssmHdUnmarked(v) ((v) & ~SSM_COLOR_MASK)
 #define ssmHdMarked(v) ((v) | SSM_COLOR_MASK)
