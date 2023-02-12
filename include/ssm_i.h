@@ -13,16 +13,18 @@
 
 // Helpers
 #define panic(msg) { \
-  fprintf(stderr, "Panic at %s:%d: %s\n", __FILE__, __LINE__, msg); \
+  fprintf(stderr, "[FATAL] (ssm) Panic at %s:%d: %s\n", \
+    __FILE__, __LINE__, msg); \
   exit(1); \
 }
 #define panicf(format, ...) { \
-  fprintf(stderr, "Panic at %s:%d: " format "\n", \
+  fprintf(stderr, "[FATAL] (ssm) Panic at %s:%d: " format "\n", \
     __FILE__, __LINE__, __VA_ARGS__); \
   exit(1); \
 }
 #define unimplemented() { \
-  fprintf(stderr, "Unimplemented! %s:%d\n", __FILE__, __LINE__); \
+  fprintf(stderr, "[FATAL] (ssm) Unimplemented! %s:%d\n", \
+    __FILE__, __LINE__); \
   exit(1); \
 }
 
@@ -75,8 +77,8 @@ void initMem(Mem* mem,
   size_t global_size);
 void finiMem(Mem* mem);
 
-void fullGC(Mem* mem);
-void minorGC(Mem* mem);
+int fullGC(Mem* mem);
+int minorGC(Mem* mem);
 
 ssmT newLong(Mem *mem, ssmV bytes);
 ssmT newTup(Mem *mem, ssmV tag, ssmV words);
