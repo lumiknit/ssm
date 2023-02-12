@@ -3,23 +3,35 @@
 # Copyright (C) 2023 lumiknit
 # License: MIT
 
-TARGET=ssm
+EXE_TARGET=ssm
+TEST_TARGET=ssm-test
+
 CFLAGS=-Wall -Wextra -O2
 LDFLAGS=
-
-OBJS=ssm.o ssm_gc.o ssm_stack.o
 INCLUDES=-Iinclude
 SRCDIR=src
 
-.PHONY: all clean
+OBJS=ssm_gc.o ssm_stack.o
+EXE_OBJS=ssm.o $(OBJS)
+TEST_OBJS=ssm_test.o $(OBJS)
+ALL_OBJS=ssm.o ssm_test.o $(OBJS)
 
-all: $(TARGET)
 
-$(TARGET): $(OBJS)
-	$(CC) $(LDFLAGS) -o $@ $^
+.PHONY: all test clean
+
+all: $(EXE_TARGET) $(TEST_TARGET)
+
+$(EXE_TARGET): $(EXE_OBJS)
+	$(CC) $(LDFLAGS) -o $@ $<
+
+$(TEST_TARGET): $(TEST_OBJS)
+	$(CC) $(LDFLAGS) -o $@ $<
 
 %.o: src/%.c include/*.h
 	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<
 
+test: $(TEST_TARGET)
+	./$(TEST_TARGET)
+
 clean:
-	rm -f $(TARGET) $(OBJS)
+	rm -f $(EXE_TARGET) $(TEST_TARGET) $(ALL_OBJS)
