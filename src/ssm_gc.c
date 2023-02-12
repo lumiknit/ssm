@@ -60,11 +60,10 @@ void finiMem(Mem* mem) {
   // Free minor heap
   free(mem->minor);
   // Free major heap
-  ssmT majors[] = {mem->major_immortal, mem->major_leaves, mem->major_nodes};
   int m;
   ssmT i, t;
-  for(m = 0; m < 3; m++) {
-    for(i = majors[m]; i != NULL; i = t) {
+  for(m = 0; m < MAJOR_LIST_KINDS; m++) {
+    for(i = mem->major_list[m]; i != NULL; i = t) {
       t = ssmTNext(i);
       free(i - 1);
     }
@@ -82,8 +81,8 @@ static inline ssmT allocMajorLong(Mem* mem, ssmV bytes) {
   }
   ssmT tup = ((ssmT)p) + 1;
   // Write major info
-  ssmTNext(tup) = mem->major_leaves;
-  mem->major_leaves = tup;
+  ssmTNext(tup) = mem->major_list[MAJOR_LIST_LEAVES];
+  mem->major_list[MAJOR_LIST_LEAVES] = tup;
   mem->major_allocated_words += size;
   ssmTHd(tup) = ssmLongHd(bytes);
   return tup;
@@ -97,8 +96,8 @@ static inline ssmT allocMajorShort(Mem* mem, ssmV tag, ssmV words) {
   }
   ssmT tup = ((ssmT)p) + 1;
   // Write major info
-  ssmTNext(tup) = mem->major_nodes;
-  mem->major_nodes = tup;
+  ssmTNext(tup) = mem->major_list[MAJOR_LIST_NODES];
+  mem->major_list[MAJOR_LIST_NODES] = tup;
   mem->major_allocated_words += size;
   ssmTHd(tup) = ssmShortHd(tag, words);
   return tup;
@@ -173,9 +172,8 @@ static int markableMinor(Mem* mem, ssmT tup) {
 
 static void freeUnmarkedMajor(Mem* mem) {
   ssmV m;
-  ssmT *majors[2] = { &mem->major_nodes, &mem->major_leaves };
-  for(m = 0; m < 2; m++) {
-    ssmT *lst = majors[m];
+  for(m = MAJOR_LIST_LEAVES; m <= MAJOR_LIST_NODES; m++) {
+    ssmT *lst = &mem->major_list[m];
     for(;;) {
       ssmT next = *lst;
       if(next == NULL) break;
@@ -196,7 +194,7 @@ static void freeUnmarkedMajor(Mem* mem) {
 
 static void moveMinorToMajor(Mem* mem) {
   // First, record last short list
-  ssmT last_short = mem->major_nodes;
+  ssmT last_short = mem->major_list[MAJOR_LIST_NODES];
   // Then, copy all marked objects to major heap
   // and write new address into old tuple (header position)
   ssmT ptr = mem->minor->vals + mem->minor->top;
@@ -220,7 +218,7 @@ static void moveMinorToMajor(Mem* mem) {
     ptr += ssmTWords(words);
   }
   // Traverse all short lists and readdressing
-  ssmT tup = mem->major_nodes;
+  ssmT tup = mem->major_list[MAJOR_LIST_NODES];
   for(; tup != NULL && tup != last_short; tup = ssmTNext(tup)) {
     const ssmV words = ssmHdShortWords(ssmTHd(tup));
     ssmV i;

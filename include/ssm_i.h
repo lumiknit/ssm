@@ -58,12 +58,13 @@ typedef struct Mem {
   // Major heap
   size_t major_allocated_words;
   size_t major_gc_threshold;
-  // Immortal objects (never freed, e.g. global constant)
-  ssmV* major_immortal;
-  // Leaves (cannot contain any reference, e.g. long tuple)
-  ssmV* major_leaves;
-  // Nodes (may contain references)
-  ssmV* major_nodes;
+
+  // Major tuple list
+#define MAJOR_LIST_KINDS 3
+#define MAJOR_LIST_IMMORTAL 0 // Never freed
+#define MAJOR_LIST_LEAVES 1 // Cannot contain any reference
+#define MAJOR_LIST_NODES 2 // May contain references
+  ssmV *major_list[3];
   
   // Stack
   Stack* stack;
