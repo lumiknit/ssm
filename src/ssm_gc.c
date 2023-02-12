@@ -66,7 +66,7 @@ void finiMem(Mem* mem) {
   for(m = 0; m < 3; m++) {
     for(i = majors[m]; i != NULL; i = t) {
       t = ssmTNext(i);
-      free(i);
+      free(i - 1);
     }
   }
   // Free stacks
@@ -100,6 +100,24 @@ static inline ssmT allocMajorShort(Mem* mem, ssmV tag, ssmV words) {
   ssmTNext(tup) = mem->major_nodes;
   mem->major_nodes = tup;
   mem->major_allocated_words += size;
+  ssmTHd(tup) = ssmShortHd(tag, words);
+  return tup;
+}
+
+static inline ssmT allocMinorLongUnchecked(Mem* mem, ssmV bytes) {
+  const size_t size = ssmTWordsFromBytes(bytes);
+  mem->minor->top -= size;
+  ssmT tup = ((ssmT)mem->minor->vals) + mem->minor->top;
+  // Initialize tuple header
+  ssmTHd(tup) = ssmLongHd(bytes);
+  return tup;
+}
+
+static inline ssmT allocMinorShortUnchecked(Mem* mem, ssmV tag, ssmV words) {
+  const size_t size = ssmTWords(words);
+  mem->minor->top -= size;
+  ssmT tup = ((ssmT)mem->minor->vals) + mem->minor->top;
+  // Initialize tuple header
   ssmTHd(tup) = ssmShortHd(tag, words);
   return tup;
 }
@@ -154,11 +172,85 @@ static int markableMinor(Mem* mem, ssmT tup) {
 }
 
 static void freeUnmarkedMajor(Mem* mem) {
-  unimplemented();
+  ssmV m;
+  ssmT *majors[2] = { &mem->major_nodes, &mem->major_leaves };
+  for(m = 0; m < 2; m++) {
+    ssmT *lst = majors[m];
+    for(;;) {
+      ssmT next = *lst;
+      if(next == NULL) break;
+      const ssmV hd = ssmTHd(next);
+      if(!ssmHdColor(hd)) {
+        // Free
+        mem->major_allocated_words -= ssmTWords(hd);
+        *lst = ssmTNext(next);
+        free(next - 1);
+      } else {
+        // Unmark
+        ssmTHd(next) = ssmHdUnmarked(ssmTHd(next));
+        lst = &ssmTNext(next);
+      }
+    }
+  }
 }
 
 static void moveMinorToMajor(Mem* mem) {
-  unimplemented();
+  // First, record last short list
+  ssmT last_short = mem->major_nodes;
+  // Then, copy all marked objects to major heap
+  // and write new address into old tuple (header position)
+  ssmT ptr = mem->minor->vals + mem->minor->top;
+  ssmT lim = mem->minor->vals + mem->minor->size;
+  while(ptr < lim) {
+    const ssmV hd = ssmTHd(ptr);
+    const ssmV words = ssmHdWords(hd);
+    if(ssmHdColor(hd)) { // Marked Object
+      // Allocate new major
+      ssmT new_tup;
+      if(ssmHdIsLong(hd)) {
+        new_tup = allocMajorLong(mem, ssmHdLongBytes(hd));
+      } else {
+        new_tup = allocMajorShort(mem, ssmHdTag(hd), words);
+      }
+      // Copy all elements
+      memcpy(&ssmTElem(new_tup, 0), &ssmTElem(ptr, 0), SSM_WORD_SIZE * words);
+      // Write new address into old tuple
+      ssmTHd(ptr) = ssmTup2Val(new_tup);
+    }
+    ptr += ssmTWords(words);
+  }
+  // Traverse all short lists and readdressing
+  ssmT tup = mem->major_nodes;
+  for(; tup != NULL && tup != last_short; tup = ssmTNext(tup)) {
+    const ssmV words = ssmHdShortWords(ssmTHd(tup));
+    ssmV i;
+    for(i = 0; i < words; i++) {
+      ssmV v = ssmTElem(tup, i);
+      if(!ssmIsGCVal(v)) continue;
+      ssmT e_tup = ssmVal2Tup(v);
+      if(inStack(mem->minor, e_tup)) {
+        ssmTElem(tup, i) = ssmTHd(e_tup);
+      }
+    }
+  }
+  // Traverse all global & stacks and readdressing
+  ssmV i;
+  for(i = 0; i < mem->global->top; i++) {
+    ssmV v = mem->global->vals[i];
+    if(!ssmIsGCVal(v)) continue;
+    ssmT e_tup = ssmVal2Tup(v);
+    if(inStack(mem->minor, e_tup)) {
+      mem->global->vals[i] = ssmTHd(e_tup);
+    }
+  }
+  for(i = 0; i < mem->stack->top; i++) {
+    ssmV v = mem->stack->vals[i];
+    if(!ssmIsGCVal(v)) continue;
+    ssmT e_tup = ssmVal2Tup(v);
+    if(inStack(mem->minor, e_tup)) {
+      mem->stack->vals[i] = ssmTHd(e_tup);
+    }
+  }
 }
 
 int fullGC(Mem* mem) {
@@ -205,42 +297,35 @@ int minorGC(Mem* mem) {
 ssmT newLongTup(Mem *mem, ssmV bytes) {
   // Get size
   const size_t size = ssmTWordsFromBytes(bytes);
-  if(mem->minor->size < size) {
+  // Shortcut to allocate
+  if(size <= mem->minor->size) {
+    return allocMinorLongUnchecked(mem, bytes);
+  } else if(mem->minor->size < size) {
     // Minor heap is not enough, just alloc in major
     return allocMajorLong(mem, bytes);
-  } else if(mem->minor->top < size) {
+  } else {
     // Minor heap is enough, but not enough space
     // Do minor GC
     minorGC(mem);
+    return allocMinorLongUnchecked(mem, bytes);
   }
-  // Move top
-  mem->minor->top -= size;
-  ssmT tup = ((ssmT)mem->minor->vals) + mem->minor->top;
-  // Initialize tuple header
-  ssmTHd(tup) = ssmLongHd(bytes);
-  return tup;
 }
 
 ssmT newTup(Mem *mem, ssmV tag, ssmV words) {
   // Get size
   const size_t size = ssmTWords(words);
-  if(mem->minor->size < size) {
+  // Shortcut to allocate
+  if(size <= mem->minor->size) {
+    return allocMinorShortUnchecked(mem, tag, words);
+  } else if(mem->minor->size < size) {
     // Minor heap is not enough
     // In this case, first run minor GC for invariant
     if(minorGC(mem) < 0) {
       panic("Minor GC failed");
     }
     return allocMajorShort(mem, tag, words);
-  } 
-  if(mem->minor->top < size) {
-    // Minor heap is enough, but not enough space
-    // Do minor GC
+  } else {
     minorGC(mem);
+    return allocMinorShortUnchecked(mem, tag, words);
   }
-  // Move top
-  mem->minor->top -= size;
-  ssmT tup = ((ssmT)mem->minor->vals) + mem->minor->top;
-  // Initialize tuple header
-  ssmTHd(tup) = ssmShortHd(tag, words);
-  return tup;
 }
