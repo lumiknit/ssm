@@ -50,15 +50,24 @@ typedef ssmV* ssmT; // Tuple
 // Ptr = Pointer (not managed by GC) aligned by 2n (n >= 1)
 // Tup = Pointer of tuple (managed by GC) aligned by 2n (n >= 1)
 
+typedef union ssmPtrUnion {
+  ssmUptr u;
+  ssmIptr i;
+#ifdef SSM_FPTR
+  ssmFptr f;
+#endif
+  void *ptr;
+} ssmPtrUnion;
+
 #define ssmVal2Int(v) (((ssmIptr)v) >> 1)
 #define ssmVal2Uint(v) (((ssmUptr)v) >> 1)
-#define ssmVal2Flt(v) (((ssmFptr*)(((ssmUptr)v) & ~(ssmUptr)1)))
+#define ssmVal2Flt(v) (((ssmPtrUnion){.u = ((ssmUptr)v) & ~(ssmUptr)1}).f)
 #define ssmVal2Ptr(T, v) (((T*)(((ssmUptr)v) & ~(ssmUptr)1)))
 #define ssmVal2Tup(v) ((ssmT)v)
 
 #define ssmInt2Val(i) ((((ssmV)i) << 1) | 1)
 #define ssmUint2Val(u) ((((ssmV)u) << 1) | 1)
-#define ssmFlt2Val(f) (((ssmV)f) | 1)
+#define ssmFlt2Val(fv) (((ssmPtrUnion){.f = (fv)}).u | 1)
 #define ssmPtr2Val(p) (((ssmV)p) | 1)
 #define ssmTup2Val(t) ((ssmV)t)
 
@@ -123,19 +132,23 @@ typedef ssmV* ssmT; // Tuple
 #define ssmHdMarked(v) ((v) | SSM_COLOR_MASK)
 
 #define ssmLongHd(size) (SSM_LONG_BIT | (((ssmV)size) & SSM_LONG_SIZE_MASK))
-#define ssmShortHd(size, tag) \
-  ((((ssmV)size) & SSM_LONG_SIZE_MASK) | (((ssmV)tag) & SSM_TAG_MASK))
+#define ssmShortHd(tag, size) \
+  (((((ssmV)size) << SSM_SIZE_SHIFT) & SSM_SIZE_MASK) | \
+   (((ssmV)tag) & SSM_TAG_MASK))
 
 
 // Tuple Helpers
 
 #define ssmTHd(t) ((ssmT)t)[0]
-#define ssmTNext(t) ((ssmT*)t)[-1]
+#define ssmTMarkList(t) ((ssmT*)t)[-1]
+#define ssmTNext(t) ((ssmT*)t)[-2]
 #define ssmTElem(t, i) ((ssmT)t)[i + 1]
 #define ssmTByte(t, i) ((char*)((ssmT)t))[i]
 
 #define ssmTWords(words) (1 + words)
 #define ssmTWordsFromBytes(bytes) (1 + ((bytes + SSM_WORD_SIZE - 1) / SSM_WORD_SIZE))
+#define SSM_MINOR_TUP_EXTRA_WORDS 1
+#define SSM_MAJOR_TUP_EXTRA_WORDS 2
 
 
 #endif

@@ -28,6 +28,16 @@
   exit(1); \
 }
 
+// Logging helper
+//#define DEBUG_LOG_ENABLED
+
+#ifdef DEBUG_LOG_ENABLED
+#define logf(...) printf(__VA_ARGS__)
+#else
+#define logf(...) ((void)0)
+#endif
+
+
 // Stack
 typedef struct Stack {
   size_t size;
@@ -35,13 +45,18 @@ typedef struct Stack {
   ssmV vals[1];
 } Stack;
 
-Stack* newStack(size_t size);
+// If r2l is true, the sp moves from right to left (as call stack)
+// and must use pushStackR and popStackR
+Stack* newStack(size_t size, int r2l);
 #define freeStack(stack) free(stack)
 // Note: extendStack does not guarantee the stack is aligned
-Stack* extendStack(Stack* stack, size_t size);
+Stack* extendStackToRight(Stack* stack, size_t size);
+Stack* extendStackToLeft(Stack* stack, size_t size);
 size_t pushStack(Stack* stack, ssmV value);
 void pushStackForce(Stack** stack, ssmV value);
 ssmV popStack(Stack* stack);
+size_t pushStackR(Stack* stack, ssmV value);
+ssmV popStackR(Stack* stack);
 #define inStack(stack, ptr) \
   ((stack)->vals <= (ptr) && \
   (ptr) <= (stack)->vals + (stack)->size - 1)
@@ -75,7 +90,7 @@ typedef struct Mem {
   size_t major_gc_count;
 
   // GC template variables
-  Stack *mark_stack;
+  ssmT mark_list;
 } Mem;
 
 void initMem(Mem* mem,
@@ -88,7 +103,7 @@ void finiMem(Mem* mem);
 int fullGC(Mem* mem);
 int minorGC(Mem* mem);
 
-ssmT newLong(Mem *mem, ssmV bytes);
+ssmT newLongTup(Mem *mem, ssmV bytes);
 ssmT newTup(Mem *mem, ssmV tag, ssmV words);
 
 #endif

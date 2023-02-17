@@ -22,10 +22,10 @@ ALL_OBJS=ssm.o ssm_test.o $(OBJS)
 all: $(EXE_TARGET) $(TEST_TARGET)
 
 $(EXE_TARGET): $(EXE_OBJS)
-	$(CC) $(LDFLAGS) -o $@ $<
+	$(CC) $(LDFLAGS) -o $@ $^
 
 $(TEST_TARGET): $(TEST_OBJS)
-	$(CC) $(LDFLAGS) -o $@ $<
+	$(CC) $(LDFLAGS) -o $@ $^
 
 %.o: src/%.c include/*.h
 	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<

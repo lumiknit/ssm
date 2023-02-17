@@ -45,13 +45,11 @@ void initMem(Mem* mem,
   size_t global_size) {
   memset(mem, 0, sizeof(Mem));
 
-  mem->minor = newStack(minor_heap_size);
-  // Minor heap's top = left
-  mem->minor->top = minor_heap_size;
+  mem->minor = newStack(minor_heap_size, 1);
 
   mem->major_gc_threshold_percent = major_gc_threshold_percent;
-  mem->stack = newStack(stack_size);
-  mem->global = newStack(global_size);
+  mem->stack = newStack(stack_size, 1);
+  mem->global = newStack(global_size, 0);
 
   updateMajorGCThreshold(mem);
 }
@@ -73,51 +71,53 @@ void finiMem(Mem* mem) {
   freeStack(mem->global);
 }
 
-static inline ssmT allocMajorLong(Mem* mem, ssmV bytes) {
-  const size_t size = ssmTWordsFromBytes(bytes);
-  void* p = aligned_alloc(SSM_WORD_SIZE, SSM_WORD_SIZE + size);
+static inline ssmT allocMajorUninited(Mem* mem, ssmV words, int kind) {
+  const size_t total = SSM_MAJOR_TUP_EXTRA_WORDS + words;
+  void* p = aligned_alloc(SSM_WORD_SIZE, total * SSM_WORD_SIZE);
   if(p == NULL) {
-    panicf("Failed to alloc major long of size %zu", bytes);
+    panicf("Failed to alloc major uninited of size %zu", words);
   }
-  ssmT tup = ((ssmT)p) + 1;
-  // Write major info
-  ssmTNext(tup) = mem->major_list[MAJOR_LIST_LEAVES];
-  mem->major_list[MAJOR_LIST_LEAVES] = tup;
-  mem->major_allocated_words += size;
+  mem->major_allocated_words += total;
+  ssmT tup = ((ssmT)p) + SSM_MAJOR_TUP_EXTRA_WORDS;
+  ssmTNext(tup) = mem->major_list[kind];
+  mem->major_list[kind] = tup;
+  return tup;
+}
+
+static inline ssmT allocMajorLong(Mem* mem, ssmV bytes) {
+  ssmT tup = allocMajorUninited(mem, ssmTWordsFromBytes(bytes), MAJOR_LIST_LEAVES);
   ssmTHd(tup) = ssmLongHd(bytes);
   return tup;
 }
 
 static inline ssmT allocMajorShort(Mem* mem, ssmV tag, ssmV words) {
-  const size_t size = ssmTWords(words);
-  void* p = aligned_alloc(SSM_WORD_SIZE, SSM_WORD_SIZE + size);
-  if(p == NULL) {
-    panicf("Failed to alloc major short of size %zu", words);
-  }
-  ssmT tup = ((ssmT)p) + 1;
-  // Write major info
-  ssmTNext(tup) = mem->major_list[MAJOR_LIST_NODES];
-  mem->major_list[MAJOR_LIST_NODES] = tup;
-  mem->major_allocated_words += size;
+  ssmT tup = allocMajorUninited(mem, ssmTWords(words), MAJOR_LIST_NODES);
   ssmTHd(tup) = ssmShortHd(tag, words);
   return tup;
 }
 
+static inline ssmT allocMinorUninited(Mem *mem, ssmV words) {
+  mem->minor->top -= words + SSM_MINOR_TUP_EXTRA_WORDS;
+  const ssmT top = ((ssmT) mem->minor->vals) + mem->minor->top;
+  return top + SSM_MINOR_TUP_EXTRA_WORDS;
+}
+
 static inline ssmT allocMinorLongUnchecked(Mem* mem, ssmV bytes) {
-  const size_t size = ssmTWordsFromBytes(bytes);
-  mem->minor->top -= size;
-  ssmT tup = ((ssmT)mem->minor->vals) + mem->minor->top;
+  ssmT tup = allocMinorUninited(mem, ssmTWordsFromBytes(bytes));
   // Initialize tuple header
   ssmTHd(tup) = ssmLongHd(bytes);
+  logf("(Alloc) long %p (bytes %zu)\n", tup, bytes);
+  logf("     .. Stack %zu/%zu\n", mem->minor->top, mem->minor->size);
   return tup;
 }
 
 static inline ssmT allocMinorShortUnchecked(Mem* mem, ssmV tag, ssmV words) {
-  const size_t size = ssmTWords(words);
-  mem->minor->top -= size;
-  ssmT tup = ((ssmT)mem->minor->vals) + mem->minor->top;
+  ssmT tup = allocMinorUninited(mem, ssmTWords(words));
   // Initialize tuple header
+  logf("Hd: %zx\n", ssmShortHd(tag, words));
   ssmTHd(tup) = ssmShortHd(tag, words);
+  logf("(Alloc) short %p (words %zu)\n", tup, words);
+  logf("     .. Stack %zu/%zu\n", mem->minor->top, mem->minor->size);
   return tup;
 }
 
@@ -129,11 +129,14 @@ static void markVal(Mem *mem, ssmV val, MarkableFn markable) {
   if(!markable(mem, tup)) return;
   const ssmV hd = ssmTHd(tup);
   if(ssmHdColor(hd)) return;
+  logf("(Mark) Mark stack -> %p\n", tup);
   ssmTHd(tup) = ssmHdMarked(hd);
   if(ssmHdIsLong(hd)) return;
-  pushStackForce(&mem->mark_stack, val);
-  while(mem->mark_stack->top > 0) {
-    ssmT marked_tup = ssmVal2Tup(popStack(mem->mark_stack));
+  ssmTMarkList(tup) = mem->mark_list;
+  mem->mark_list = tup;
+  while(mem->mark_list != NULL) {
+    ssmT marked_tup = mem->mark_list;
+    mem->mark_list = ssmTMarkList(marked_tup);
     const ssmV words = ssmHdShortWords(ssmTHd(marked_tup));
     ssmV i;
     for(i = 0; i < words; i++) {
@@ -142,9 +145,11 @@ static void markVal(Mem *mem, ssmV val, MarkableFn markable) {
       if(!markable(mem, tup)) continue;
       const ssmV hd = ssmTHd(tup);
       if(ssmHdColor(hd)) continue;
+      logf("(Mark) Mark %p -> %p\n", marked_tup, tup);
       ssmTHd(tup) = ssmHdMarked(hd);
       if(ssmHdIsLong(hd)) return;
-      pushStackForce(&mem->mark_stack, ssmTup2Val(tup));
+      ssmTMarkList(tup) = mem->mark_list;
+      mem->mark_list = tup;
     }
   }
 }
@@ -152,11 +157,13 @@ static void markVal(Mem *mem, ssmV val, MarkableFn markable) {
 static void markPhase(Mem* mem, MarkableFn markable) {
   ssmV i;
   // Mark global stack
+  logf("(Mark) Marking global stack\n");
   for(i = 0; i < mem->global->top; i++) {
     markVal(mem, mem->global->vals[i], markable);
   }
   // Mark stack
-  for(i = 0; i < mem->stack->top; i++) {
+  logf("(Mark) Marking call stack\n");
+  for(i = mem->stack->top; i < mem->stack->size; i++) {
     markVal(mem, mem->stack->vals[i], markable);
   }
 }
@@ -206,12 +213,15 @@ static void moveMinorToMajor(Mem* mem) {
       // Allocate new major
       ssmT new_tup;
       if(ssmHdIsLong(hd)) {
+        logf("(Move) alloc long (%zu)\n", ssmHdLongBytes(hd));
         new_tup = allocMajorLong(mem, ssmHdLongBytes(hd));
       } else {
+        logf("(Move) alloc long (tag %zu size %zu)\n", ssmHdTag(hd), words);
         new_tup = allocMajorShort(mem, ssmHdTag(hd), words);
       }
       // Copy all elements
       memcpy(&ssmTElem(new_tup, 0), &ssmTElem(ptr, 0), SSM_WORD_SIZE * words);
+      logf("(Move) %zx\n", ssmTHd(new_tup));
       // Write new address into old tuple
       ssmTHd(ptr) = ssmTup2Val(new_tup);
     }
@@ -241,7 +251,7 @@ static void moveMinorToMajor(Mem* mem) {
       mem->global->vals[i] = ssmTHd(e_tup);
     }
   }
-  for(i = 0; i < mem->stack->top; i++) {
+  for(i = mem->stack->top; i < mem->stack->size; i++) {
     ssmV v = mem->stack->vals[i];
     if(!ssmIsGCVal(v)) continue;
     ssmT e_tup = ssmVal2Tup(v);
@@ -269,25 +279,33 @@ int fullGC(Mem* mem) {
 }
 
 int minorGC(Mem* mem) {
+  logf("(Minor %zd) Start\n", mem->minor_gc_count);
   // Check major heap is full
+  size_t minor_allocated = mem->minor->size - mem->minor->top;
   size_t major_allocated_guess = mem->major_allocated_words;
-  if(major_allocated_guess > SIZE_MAX - mem->minor->size) {
+  if(major_allocated_guess > SIZE_MAX - minor_allocated) {
     // Overflowed
     major_allocated_guess = SIZE_MAX;
   } else {
-    major_allocated_guess += mem->minor->size;
+    major_allocated_guess += minor_allocated;
   }
+  logf("(Minor %zd) guess = %zu\n", mem->minor_gc_count, major_allocated_guess);
   if(major_allocated_guess >= mem->major_gc_threshold) {
     // Major heap is full, do full GC
+    logf("(Minor %zd) Run full GC\n", mem->minor_gc_count);
     return fullGC(mem);
   }
   // Run marking phase
+  logf("(Minor %zd) Marking...\n", mem->minor_gc_count);
   markPhase(mem, markableMinor);
   // Move marked objects to major heap
+  logf("(Minor %zd) Moving...\n", mem->minor_gc_count);
   moveMinorToMajor(mem);
   // Rewind minor heap's top pointer (left)
+  logf("(Minor %zd) Rewinding...\n", mem->minor_gc_count);
   mem->minor->top = mem->minor->size;
   // Update statistics
+  logf("(Minor %zd) Done\n", mem->minor_gc_count);
   mem->minor_gc_count++;
   return 0;
 }
@@ -296,7 +314,7 @@ ssmT newLongTup(Mem *mem, ssmV bytes) {
   // Get size
   const size_t size = ssmTWordsFromBytes(bytes);
   // Shortcut to allocate
-  if(size <= mem->minor->size) {
+  if(size <= mem->minor->top) {
     return allocMinorLongUnchecked(mem, bytes);
   } else if(mem->minor->size < size) {
     // Minor heap is not enough, just alloc in major
@@ -313,7 +331,7 @@ ssmT newTup(Mem *mem, ssmV tag, ssmV words) {
   // Get size
   const size_t size = ssmTWords(words);
   // Shortcut to allocate
-  if(size <= mem->minor->size) {
+  if(size <= mem->minor->top) {
     return allocMinorShortUnchecked(mem, tag, words);
   } else if(mem->minor->size < size) {
     // Minor heap is not enough
