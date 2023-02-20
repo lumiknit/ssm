@@ -83,6 +83,7 @@ int testGC0() {
   Mem mem;
   initMem(&mem, 1024, 50, 1024, 1024);
   newTup(&mem, 1, 42);
+  finiMem(&mem);
   return 0;
 }
 
@@ -102,6 +103,7 @@ int testGC1() {
   ASSERT_EQ(v3 + 9, v2);
   ASSERT_EQ(v2 + 6, v1);
   ASSERT_EQ(v1, ((ssmT)mem.minor->vals) + (mem.minor->size - 9));
+  finiMem(&mem);
   return 0;
 }
 
@@ -113,11 +115,12 @@ int testGC2() {
   for(i = 0; i < 10000; i++) {
     newTup(&mem, 1, 20);
   }
+  finiMem(&mem);
   return 0;
 }
 
 int testGC3() {
-  // Run Minor GC
+  // Run GC a few times
   Mem mem;
   initMem(&mem, SSM_WORD_SIZE * 32, 50, 1024, 1024);
   // Create tuples
@@ -132,19 +135,32 @@ int testGC3() {
   logf("%zx\n", ssmTHd(v2));
   ASSERT_EQ(ssmHdTag(ssmTHd(v2)), 2);
   ASSERT_EQ(ssmHdTag(ssmTHd(v4)), 4);
-  // Clean up other tuples
-  minorGC(&mem);
-  // Then v2 and v4 should be moved into major heap
-  ssmT nv2 = ssmVal2Tup(mem.stack->vals[mem.stack->size - 1]);
-  ssmT nv4 = ssmVal2Tup(mem.stack->vals[mem.stack->size - 2]);
-  // Check the fact.
-  ASSERT(nv2 != v2);
-  ASSERT(nv4 != v4);
-  logf("%zx\n", ssmTHd(nv2));
-  logf("%zx\n", ssmTHd(nv4));
-  ASSERT_EQ(ssmHdTag(ssmTHd(nv2)), 2);
-  ASSERT_EQ(ssmHdTag(ssmTHd(nv4)), 4);
-  ASSERT_EQ(mem.major_allocated_words, 2 * (SSM_MAJOR_TUP_EXTRA_WORDS + 6));
+  // Run minor GC 2 times and major GC 1 time
+  int i;
+  for(i = 0; i < 3; i++) {
+    // Clean up other tuples
+    if(i == 2) fullGC(&mem);
+    else minorGC(&mem);
+    // Then v2 and v4 should be moved into major heap
+    ssmT nv2 = ssmVal2Tup(mem.stack->vals[mem.stack->size - 1]);
+    ssmT nv4 = ssmVal2Tup(mem.stack->vals[mem.stack->size - 2]);
+    // Check the fact.
+    ASSERT(nv2 != v2);
+    ASSERT(nv4 != v4);
+    logf("%zx\n", ssmTHd(nv2));
+    logf("%zx\n", ssmTHd(nv4));
+    ASSERT_EQ(ssmHdTag(ssmTHd(nv2)), 2);
+    ASSERT_EQ(ssmHdSize(ssmTHd(nv2)), 5);
+    ASSERT_EQ(ssmHdTag(ssmTHd(nv4)), 4);
+    ASSERT_EQ(ssmHdSize(ssmTHd(nv4)), 5);
+    ASSERT_EQ(mem.major_allocated_words, 2 * (SSM_MAJOR_TUP_EXTRA_WORDS + 6));
+  }
+  // Clean-up
+  popStackR(mem.stack);
+  popStackR(mem.stack);
+  fullGC(&mem);
+  ASSERT_EQ(mem.major_allocated_words, 0);
+  finiMem(&mem);
   return 0;
 }
 

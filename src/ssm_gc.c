@@ -56,19 +56,29 @@ void initMem(Mem* mem,
 
 void finiMem(Mem* mem) {
   // Free minor heap
-  free(mem->minor);
+  if(mem->minor != NULL) {
+    freeStack(mem->minor);
+    mem->minor = NULL;
+  }
   // Free major heap
   int m;
   ssmT i, t;
   for(m = 0; m < MAJOR_LIST_KINDS; m++) {
     for(i = mem->major_list[m]; i != NULL; i = t) {
       t = ssmTNext(i);
-      free(i - 1);
+      free(i - SSM_MAJOR_TUP_EXTRA_WORDS);
     }
+    mem->major_list[m] = NULL;
   }
   // Free stacks
-  freeStack(mem->stack);
-  freeStack(mem->global);
+  if(mem->stack != NULL) {
+    freeStack(mem->stack);
+    mem->stack = NULL;
+  }
+  if(mem->global != NULL) {
+    freeStack(mem->global);
+    mem->global = NULL;
+  }
 }
 
 static inline ssmT allocMajorUninited(Mem* mem, ssmV words, int kind) {
@@ -85,7 +95,8 @@ static inline ssmT allocMajorUninited(Mem* mem, ssmV words, int kind) {
 }
 
 static inline ssmT allocMajorLong(Mem* mem, ssmV bytes) {
-  ssmT tup = allocMajorUninited(mem, ssmTWordsFromBytes(bytes), MAJOR_LIST_LEAVES);
+  const size_t words = ssmTWordsFromBytes(bytes);
+  ssmT tup = allocMajorUninited(mem, words, MAJOR_LIST_LEAVES);
   ssmTHd(tup) = ssmLongHd(bytes);
   return tup;
 }
@@ -187,9 +198,11 @@ static void freeUnmarkedMajor(Mem* mem) {
       const ssmV hd = ssmTHd(next);
       if(!ssmHdColor(hd)) {
         // Free
-        mem->major_allocated_words -= ssmTWords(hd);
+        const ssmV words =
+          ssmTWords(ssmHdWords(hd)) + SSM_MAJOR_TUP_EXTRA_WORDS;
+        mem->major_allocated_words -= words;
         *lst = ssmTNext(next);
-        free(next - 1);
+        free(next - SSM_MAJOR_TUP_EXTRA_WORDS);
       } else {
         // Unmark
         ssmTHd(next) = ssmHdUnmarked(ssmTHd(next));
@@ -225,7 +238,7 @@ static void moveMinorToMajor(Mem* mem) {
       // Write new address into old tuple
       ssmTHd(ptr) = ssmTup2Val(new_tup);
     }
-    ptr += ssmTWords(words);
+    ptr += ssmTWords(words) + SSM_MINOR_TUP_EXTRA_WORDS;
   }
   // Traverse all short lists and readdressing
   ssmT tup = mem->major_list[MAJOR_LIST_NODES];
@@ -312,7 +325,7 @@ int minorGC(Mem* mem) {
 
 ssmT newLongTup(Mem *mem, ssmV bytes) {
   // Get size
-  const size_t size = ssmTWordsFromBytes(bytes);
+  const size_t size = ssmTWordsFromBytes(bytes) + SSM_MINOR_TUP_EXTRA_WORDS;
   // Shortcut to allocate
   if(size <= mem->minor->top) {
     return allocMinorLongUnchecked(mem, bytes);
@@ -329,7 +342,7 @@ ssmT newLongTup(Mem *mem, ssmV bytes) {
 
 ssmT newTup(Mem *mem, ssmV tag, ssmV words) {
   // Get size
-  const size_t size = ssmTWords(words);
+  const size_t size = ssmTWords(words) + SSM_MINOR_TUP_EXTRA_WORDS;
   // Shortcut to allocate
   if(size <= mem->minor->top) {
     return allocMinorShortUnchecked(mem, tag, words);

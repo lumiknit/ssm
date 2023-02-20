@@ -6,7 +6,7 @@
 EXE_TARGET=ssm
 TEST_TARGET=ssm-test
 
-CFLAGS=-Wall -Wextra -O2
+CFLAGS=-Wall -Wextra -O2 -g
 LDFLAGS=
 INCLUDES=-Iinclude
 SRCDIR=src
