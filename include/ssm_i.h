@@ -29,7 +29,7 @@
 }
 
 // Logging helper
-//#define DEBUG_LOG_ENABLED
+#define DEBUG_LOG_ENABLED
 
 #ifdef DEBUG_LOG_ENABLED
 #define logf(...) printf(__VA_ARGS__)

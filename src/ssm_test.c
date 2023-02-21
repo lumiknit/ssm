@@ -164,6 +164,60 @@ int testGC3() {
   return 0;
 }
 
+int testGCRandom1() {
+  int i;
+  // Init
+  Mem mem;
+  initMem(&mem, 100, 50, 128, 128);
+  const int stack_n = 4;
+  // Push some NULL in stack
+  for(i = 0; i < stack_n; i++) {
+    pushStackR(mem.stack, ssmTup2Val(NULL));
+  }
+  // Create many trees
+  const int n = 10000;
+  
+  for(i = 0; i < n; i++) {
+    int r = rand() % 4;
+    printf("-- %6d: op %d\n", i, r);
+    // First take a random number and do random operation
+    switch(r) {
+    case 0: {
+      // Create a tuple and push into stack
+      const size_t size = 2 + (rand() % 10);
+      ssmT v = newTup(&mem, 1, size);
+      memset(&ssmTElem(v, 0), 0x00, size * SSM_WORD_SIZE);
+      // Push it into stack
+      const size_t idx = mem.stack->size - 1 - (rand() % stack_n);
+      ssmTElem(v, rand() % size) = mem.stack->vals[idx];
+      mem.stack->vals[idx] = ssmTup2Val(v);
+    } break;
+    case 1: {
+      // Put a value in random position
+      const size_t idx = mem.stack->size - 1 - (rand() % stack_n);
+      const size_t size = 2 + (rand() % 10);
+      ssmT v = newTup(&mem, 1, size);
+      if(ssmVal2Tup(mem.stack->vals[idx]) != NULL) {
+        ssmT tup = ssmVal2Tup(mem.stack->vals[idx]);
+        ssmTElem(tup, 0) = ssmTup2Val(v);
+      }
+    } break;
+    case 2: {
+      // Remove random index
+      const size_t idx = mem.stack->size - 1 - (rand() % stack_n);
+      mem.stack->vals[idx] = ssmTup2Val(NULL);
+    } break;
+    case 3: {
+      // Just alloc
+      newLongTup(&mem, 10 + rand() % 100);
+    } break;
+    }
+  }
+  // Fin
+  finiMem(&mem);
+  return 0;
+}
+
 int testGCSize() {
   ASSERT_EQ(SSM_WORD_SIZE, sizeof(void*));
   Mem mem;
@@ -199,6 +253,7 @@ int testGCSize() {
   mem.major_gc_threshold_percent = SIZE_MAX - 100;
   updateMajorGCThreshold(&mem);
   ASSERT_EQ(mem.major_gc_threshold_words, SIZE_MAX / 100);
+  finiMem(&mem);
   return 0;
 }
 
@@ -208,6 +263,7 @@ void gcTest() {
   TEST(testGC1);
   TEST(testGC2);
   TEST(testGC3);
+  TEST(testGCRandom1);
   TEST(testGCSize);
 }
 

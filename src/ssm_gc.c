@@ -223,11 +223,12 @@ static void moveMinorToMajor(Mem* mem) {
   ssmT last_short = mem->major_list[MAJOR_LIST_NODES];
   // Then, copy all marked objects to major heap
   // and write new address into old tuple (header position)
-  ssmT ptr = mem->minor->vals + mem->minor->top;
+  ssmT ptr = mem->minor->vals + mem->minor->top + SSM_MINOR_TUP_EXTRA_WORDS;
   ssmT lim = mem->minor->vals + mem->minor->size;
   while(ptr < lim) {
     const ssmV hd = ssmTHd(ptr);
     const ssmV words = ssmHdWords(hd);
+    logf("(Move) ptr = %p, hd = 0x%zx\n", ptr, hd);
     if(ssmHdColor(hd)) { // Marked Object
       // Allocate new major
       ssmT new_tup;
@@ -235,12 +236,13 @@ static void moveMinorToMajor(Mem* mem) {
         logf("(Move) alloc long (%zu)\n", ssmHdLongBytes(hd));
         new_tup = allocMajorLong(mem, ssmHdLongBytes(hd));
       } else {
-        logf("(Move) alloc long (tag %zu size %zu)\n", ssmHdTag(hd), words);
+        logf("(Move) alloc short (tag %zu size %zu)\n", ssmHdTag(hd), words);
         new_tup = allocMajorShort(mem, ssmHdTag(hd), words);
       }
+      logf("(Move) %p -> %p\n", ptr, new_tup);
       // Copy all elements
       memcpy(&ssmTElem(new_tup, 0), &ssmTElem(ptr, 0), SSM_WORD_SIZE * words);
-      logf("(Move) %zx\n", ssmTHd(new_tup));
+      logf("(Move) hd = %zx\n", ssmTHd(new_tup));
       // Write new address into old tuple
       ssmTHd(ptr) = ssmTup2Val(new_tup);
     }
@@ -308,7 +310,8 @@ int minorGC(Mem* mem) {
   } else {
     major_allocated_guess += minor_allocated;
   }
-  logf("(Minor %zd) guess = %zu\n", mem->minor_gc_count, major_allocated_guess);
+  logf("(Minor %zd) guess = %zu, thre = %zu\n",
+    mem->minor_gc_count, major_allocated_guess, mem->major_gc_threshold_words);
   if(major_allocated_guess >= mem->major_gc_threshold_words) {
     // Major heap is full, do full GC
     logf("(Minor %zd) Run full GC\n", mem->minor_gc_count);
