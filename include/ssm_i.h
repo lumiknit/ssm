@@ -63,6 +63,8 @@ ssmV popStackR(Stack* stack);
 
 // GC
 
+#define MIN_MAJOR_HEAP_FACTOR 7
+
 typedef struct Mem {
   // Configurations
   size_t major_gc_threshold_percent;
@@ -72,7 +74,7 @@ typedef struct Mem {
 
   // Major heap
   size_t major_allocated_words;
-  size_t major_gc_threshold;
+  size_t major_gc_threshold_words;
 
   // Major tuple list
 #define MAJOR_LIST_KINDS 3
@@ -94,11 +96,13 @@ typedef struct Mem {
 } Mem;
 
 void initMem(Mem* mem,
-  size_t minor_heap_size,
+  size_t minor_heap_words,
   size_t major_gc_threshold_percent,
   size_t stack_size,
   size_t global_size);
 void finiMem(Mem* mem);
+
+void updateMajorGCThreshold(Mem* mem);
 
 int fullGC(Mem* mem);
 int minorGC(Mem* mem);

@@ -7,21 +7,27 @@
 
 #include <ssm_i.h>
 
-static void updateMajorGCThreshold(Mem* mem) {
+void updateMajorGCThreshold(Mem* mem) {
   // If major_gc_threshold_percent is 0, disable major GC
   if(mem->major_gc_threshold_percent == 0) {
-    mem->major_gc_threshold = SIZE_MAX;
+    mem->major_gc_threshold_words = SIZE_MAX;
     return;
   }
+  // Calculate new major gc threshold percent
+  size_t percent = mem->major_gc_threshold_percent + 100;
+  if(percent < mem->major_gc_threshold_percent) {
+    // Overflow
+    percent = SIZE_MAX;
+  }
   // Set major gc thresold to minimum major heap size
-  mem->major_gc_threshold = mem->minor->size * 7;
+  mem->major_gc_threshold_words = mem->minor->size * MIN_MAJOR_HEAP_FACTOR;
   // To calculate percentage, split allocated into two part
   const size_t lo = mem->major_allocated_words % 100;
   const size_t hi = mem->major_allocated_words / 100;
   // Calculate percentage with checking overflow
-  const size_t lo_percented = lo * mem->major_gc_threshold_percent / 100;
-  size_t hi_percented = hi * mem->major_gc_threshold_percent;
-  if(hi_percented / mem->major_gc_threshold_percent != hi) {
+  const size_t lo_percented = lo * percent / 100;
+  size_t hi_percented = hi * percent;
+  if(hi_percented / percent != hi) {
     // Overflowed
     hi_percented = SIZE_MAX;
   }
@@ -33,19 +39,19 @@ static void updateMajorGCThreshold(Mem* mem) {
     percented = hi_percented + lo_percented;
   }
   // Update if calculated one is larger
-  if(percented > mem->major_gc_threshold) {
-    mem->major_gc_threshold = percented;
+  if(percented > mem->major_gc_threshold_words) {
+    mem->major_gc_threshold_words = percented;
   }
 }
 
 void initMem(Mem* mem,
-  size_t minor_heap_size,
+  size_t minor_heap_words,
   size_t major_gc_threshold_percent,
   size_t stack_size,
   size_t global_size) {
   memset(mem, 0, sizeof(Mem));
 
-  mem->minor = newStack(minor_heap_size, 1);
+  mem->minor = newStack(minor_heap_words, 1);
 
   mem->major_gc_threshold_percent = major_gc_threshold_percent;
   mem->stack = newStack(stack_size, 1);
@@ -303,7 +309,7 @@ int minorGC(Mem* mem) {
     major_allocated_guess += minor_allocated;
   }
   logf("(Minor %zd) guess = %zu\n", mem->minor_gc_count, major_allocated_guess);
-  if(major_allocated_guess >= mem->major_gc_threshold) {
+  if(major_allocated_guess >= mem->major_gc_threshold_words) {
     // Major heap is full, do full GC
     logf("(Minor %zd) Run full GC\n", mem->minor_gc_count);
     return fullGC(mem);

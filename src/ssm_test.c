@@ -110,7 +110,7 @@ int testGC1() {
 int testGC2() {
   // Run minor GC many times
   Mem mem;
-  initMem(&mem, SSM_WORD_SIZE * 32, 50, 1024, 1024);
+  initMem(&mem, 32, 50, 1024, 1024);
   int i;
   for(i = 0; i < 10000; i++) {
     newTup(&mem, 1, 20);
@@ -122,7 +122,7 @@ int testGC2() {
 int testGC3() {
   // Run GC a few times
   Mem mem;
-  initMem(&mem, SSM_WORD_SIZE * 32, 50, 1024, 1024);
+  initMem(&mem, 100, 50, 1024, 1024);
   // Create tuples
   newTup(&mem, 1, 5);
   ssmT v2 = newTup(&mem, 2, 5);
@@ -164,11 +164,51 @@ int testGC3() {
   return 0;
 }
 
+int testGCSize() {
+  ASSERT_EQ(SSM_WORD_SIZE, sizeof(void*));
+  Mem mem;
+  initMem(&mem, 10, 50, 1024, 1024);
+  ASSERT_EQ(mem.major_gc_threshold_percent, 50);
+  ASSERT_EQ(mem.major_gc_threshold_words, 10 * MIN_MAJOR_HEAP_FACTOR);
+  // Check for multiple cases
+  const size_t as[] = {121, 2521, 7721, 20000, 30000, 71201, 500000, 1775126};
+  const size_t ps[] = {20, 50, 77, 100, 225, 333, 1000};
+  // Change allocated size
+  size_t i, j;
+  for(i = 0; i < sizeof(as) / sizeof(size_t); i++) {
+    mem.major_allocated_words = as[i];
+    // Change threshold percent
+    for(j = 0; j < sizeof(ps) / sizeof(size_t); j++) {
+      mem.major_gc_threshold_percent = ps[j];
+      updateMajorGCThreshold(&mem);
+      ASSERT_EQ(mem.major_gc_threshold_words, as[i] * (100 + ps[j]) / 100);
+    }
+  }
+  // Check overflow 1
+  mem.major_allocated_words = 10 + SIZE_MAX / 2;
+  mem.major_gc_threshold_percent = 100;
+  updateMajorGCThreshold(&mem);
+  ASSERT_EQ(mem.major_gc_threshold_words, SIZE_MAX);
+  // Check overflow 2
+  mem.major_allocated_words = 100;
+  mem.major_gc_threshold_percent = SIZE_MAX;
+  updateMajorGCThreshold(&mem);
+  ASSERT_EQ(mem.major_gc_threshold_words, SIZE_MAX);
+  // Non-overflow
+  mem.major_allocated_words = 1;
+  mem.major_gc_threshold_percent = SIZE_MAX - 100;
+  updateMajorGCThreshold(&mem);
+  ASSERT_EQ(mem.major_gc_threshold_words, SIZE_MAX / 100);
+  return 0;
+}
+
+
 void gcTest() {
   TEST(testGC0);
   TEST(testGC1);
   TEST(testGC2);
   TEST(testGC3);
+  TEST(testGCSize);
 }
 
 // ---------------------------------------------------------
