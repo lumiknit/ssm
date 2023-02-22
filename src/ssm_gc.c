@@ -140,17 +140,7 @@ static inline ssmT allocMinorShortUnchecked(Mem* mem, ssmV tag, ssmV words) {
 
 typedef int (*MarkableFn)(Mem*, ssmT);
 
-static void markVal(Mem *mem, ssmV val, MarkableFn markable) {
-  if(!ssmIsGCVal(val)) return;
-  ssmT tup = ssmVal2Tup(val);
-  if(!markable(mem, tup)) return;
-  const ssmV hd = ssmTHd(tup);
-  if(ssmHdColor(hd)) return;
-  logf("(Mark) Mark stack -> %p\n", tup);
-  ssmTHd(tup) = ssmHdMarked(hd);
-  if(ssmHdIsLong(hd)) return;
-  ssmTMarkList(tup) = mem->mark_list;
-  mem->mark_list = tup;
+static inline void markChain(Mem *mem, MarkableFn markable) {
   while(mem->mark_list != NULL) {
     ssmT marked_tup = mem->mark_list;
     mem->mark_list = ssmTMarkList(marked_tup);
@@ -171,8 +161,24 @@ static void markVal(Mem *mem, ssmV val, MarkableFn markable) {
   }
 }
 
+static void markVal(Mem *mem, ssmV val, MarkableFn markable) {
+  if(!ssmIsGCVal(val)) return;
+  ssmT tup = ssmVal2Tup(val);
+  if(!markable(mem, tup)) return;
+  const ssmV hd = ssmTHd(tup);
+  if(ssmHdColor(hd)) return;
+  logf("(Mark) Mark stack -> %p\n", tup);
+  ssmTHd(tup) = ssmHdMarked(hd);
+  if(ssmHdIsLong(hd)) return;
+  ssmTMarkList(tup) = mem->mark_list;
+  mem->mark_list = tup;
+  markChain(mem, markable);
+}
+
 static void markPhase(Mem* mem, MarkableFn markable) {
   ssmV i;
+  // Clean-up all chain
+  markChain(mem, markable);
   // Mark global stack
   logf("(Mark) Marking global stack\n");
   for(i = 0; i < mem->global->top; i++) {
@@ -208,6 +214,7 @@ static void freeUnmarkedMajor(Mem* mem) {
           ssmTWords(ssmHdWords(hd)) + SSM_MAJOR_TUP_EXTRA_WORDS;
         mem->major_allocated_words -= words;
         *lst = ssmTNext(next);
+        logf("(Free) %p (words %zu)\n", next, words);
         free(next - SSM_MAJOR_TUP_EXTRA_WORDS);
       } else {
         // Unmark
@@ -234,13 +241,14 @@ static void moveMinorToMajor(Mem* mem) {
       // Allocate new major
       ssmT new_tup;
       if(ssmHdIsLong(hd)) {
-        logf("(Move) alloc long (%zu)\n", ssmHdLongBytes(hd));
+        logf("       alloc long (%zu)\n", ssmHdLongBytes(hd));
         new_tup = allocMajorLong(mem, ssmHdLongBytes(hd));
       } else {
-        logf("(Move) alloc short (tag %zu size %zu)\n", ssmHdTag(hd), words);
+        logf("       alloc short (tag %zu size %zu)\n", ssmHdTag(hd), words);
         new_tup = allocMajorShort(mem, ssmHdTag(hd), words);
       }
-      logf("(Move) %p -> %p\n", ptr, new_tup);
+      logf("       %p -> %p\n", ptr, new_tup);
+      logf("       %zx %zx\n", ptr[1], ptr[2]);
       // Copy all elements
       memcpy(&ssmTElem(new_tup, 0), &ssmTElem(ptr, 0), SSM_WORD_SIZE * words);
       logf("(Move) hd = %zx\n", ssmTHd(new_tup));
@@ -373,5 +381,58 @@ ssmT newTup(Mem *mem, ssmV tag, ssmV words) {
   } else {
     minorGC(mem);
     return allocMinorShortUnchecked(mem, tag, words);
+  }
+}
+
+void gcWriteBarrier(Mem *mem, ssmT tup) {
+  const ssmV hd = ssmTHd(tup);
+  if(ssmHdColor(hd) == SSM_COLOR_WHITE) {
+    logf("Write barrier: %p\n", tup);
+    // If the object is white, mark it gray
+    ssmTHd(tup) = ssmHdMarked(hd);
+    // Push to gray list
+    ssmTMarkList(tup) = mem->mark_list;
+    mem->mark_list = tup;
+  }
+}
+
+static void checkMemTupInvariants(ssmT tup) {
+  const ssmV hd = ssmTHd(tup);
+  const ssmV words = ssmHdWords(hd);
+  if(!ssmHdIsLong(hd)) {
+    ssmV i;
+    for(i = 0; i < words; i++) {
+      ssmV e = ssmTElem(tup, i);
+      if(e > 0x200000000ULL) {
+        panicf("Invalid value in tup %p[%zu/%zu]: %zu = 0x%zx\n", tup, i, words, e, e);
+      }
+    }
+  }
+}
+
+void checkMemInvariants(Mem *mem) {
+  { // Check traverse minor heap
+    ssmT ptr = mem->minor->vals + mem->minor->top;
+    ssmT lim = mem->minor->vals + mem->minor->size;
+    while(ptr < lim) {
+      const ssmT tup = ptr + SSM_MINOR_TUP_EXTRA_WORDS;
+      const ssmV hd = ssmTHd(tup);
+      const ssmV words = ssmHdWords(hd);
+      const ssmV twords = ssmTWords(words);
+      checkMemTupInvariants(tup);
+      ptr += twords + SSM_MINOR_TUP_EXTRA_WORDS;
+    }
+    if(ptr != lim) {
+      panic("Minor heap headers may be corrupted");
+    }
+  }
+  { // Check traverse major heap
+    ssmV m;
+    for(m = 0; m < MAJOR_LIST_KINDS; m++) {
+      ssmT lst = mem->major_list[m];
+      for(; lst != NULL; lst = ssmTNext(lst)) {
+        checkMemTupInvariants(lst);
+      }
+    }
   }
 }

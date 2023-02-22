@@ -175,14 +175,14 @@ int testGCRandom1() {
     pushStackR(mem.stack, ssmTup2Val(NULL));
   }
   // Create many trees
-  const int n = 10000;
+  const int n = 100000;
   
   for(i = 0; i < n; i++) {
-    int r = rand() % 4;
+    int r = rand() % 8;
     printf("-- %6d: op %d\n", i, r);
     // First take a random number and do random operation
     switch(r) {
-    case 0: {
+    case 0: case 4: case 6: {
       // Create a tuple and push into stack
       const size_t size = 2 + (rand() % 10);
       ssmT v = newTup(&mem, 1, size);
@@ -192,7 +192,7 @@ int testGCRandom1() {
       ssmTElem(v, rand() % size) = mem.stack->vals[idx];
       mem.stack->vals[idx] = ssmTup2Val(v);
     } break;
-    case 1: {
+    case 1: case 5: case 7: {
       // Put a value in random position
       const size_t idx = mem.stack->size - 1 - (rand() % stack_n);
       const size_t size = 2 + (rand() % 10);
@@ -201,6 +201,7 @@ int testGCRandom1() {
       if(ssmVal2Tup(mem.stack->vals[idx]) != NULL) {
         ssmT tup = ssmVal2Tup(mem.stack->vals[idx]);
         ssmTElem(tup, 0) = ssmTup2Val(v);
+        gcWriteBarrier(&mem, tup);
       }
     } break;
     case 2: {
@@ -213,7 +214,10 @@ int testGCRandom1() {
       newLongTup(&mem, 10 + rand() % 100);
     } break;
     }
+    checkMemInvariants(&mem);
   }
+  logf("Minor top/size: %zu/%zu words\n", mem.minor->top, mem.minor->size);
+  logf("Major Allocated: %zu words\n", mem.major_allocated_words);
   // Fin
   finiMem(&mem);
   return 0;

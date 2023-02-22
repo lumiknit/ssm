@@ -110,4 +110,8 @@ int minorGC(Mem* mem);
 ssmT newLongTup(Mem *mem, ssmV bytes);
 ssmT newTup(Mem *mem, ssmV tag, ssmV words);
 
+void gcWriteBarrier(Mem *mem, ssmT tup);
+
+void checkMemInvariants(Mem* mem);
+
 #endif
