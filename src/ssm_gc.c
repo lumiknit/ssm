@@ -202,7 +202,7 @@ static void freeUnmarkedMajor(Mem* mem) {
       ssmT next = *lst;
       if(next == NULL) break;
       const ssmV hd = ssmTHd(next);
-      if(!ssmHdColor(hd)) {
+      if(ssmHdColor(hd) != SSM_COLOR_BLACK) {
         // Free
         const ssmV words =
           ssmTWords(ssmHdWords(hd)) + SSM_MAJOR_TUP_EXTRA_WORDS;
@@ -229,6 +229,7 @@ static void moveMinorToMajor(Mem* mem) {
     const ssmV hd = ssmTHd(ptr);
     const ssmV words = ssmHdWords(hd);
     logf("(Move) ptr = %p, hd = 0x%zx\n", ptr, hd);
+    logf("       words = %zu\n", words);
     if(ssmHdColor(hd)) { // Marked Object
       // Allocate new major
       ssmT new_tup;
@@ -283,18 +284,25 @@ static void moveMinorToMajor(Mem* mem) {
 }
 
 int fullGC(Mem* mem) {
+  logf("(Full %zd) Start\n", mem->major_gc_count);
   // Run marking phase
+  logf("(Full %zd) Marking...\n", mem->major_gc_count);
   markPhase(mem, markableMajor);
   // Traverse object list and free unmarked objects
   // also unmark all marked objects
+  logf("(Full %zd) Freeing unmarked...\n", mem->major_gc_count);
   freeUnmarkedMajor(mem);
-  // TODO: Move marked object in minor heap to major heap
+  // Move marked object in minor heap to major heap
+  logf("(Full %zd) Move minor to major...\n", mem->major_gc_count);
   moveMinorToMajor(mem);
   // Rewind minor heap's top pointer (left)
+  logf("(Full %zd) Rewinding minor...\n", mem->major_gc_count);
   mem->minor->top = mem->minor->size;
   // Adjust major gc threshold
+  logf("(Full %zd) Updating major GC threshold...\n", mem->major_gc_count);
   updateMajorGCThreshold(mem);
   // Update statistics
+  logf("(Full %zd) Done\n", mem->major_gc_count);
   mem->major_gc_count++;
   return 0;
 }

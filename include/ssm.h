@@ -23,15 +23,15 @@ typedef uintptr_t ssmUptr;
 
 #if UINTPTR_MAX == 0xffffffffffffffffu // 64-bit
 
-#define SSM_WORD_BITS 64
-#define SSM_WORD_SIZE 8
+#define SSM_WORD_BITS ((size_t)64)
+#define SSM_WORD_SIZE ((size_t)8)
 #define SSM_FPTR 1
 typedef double ssmFptr;
 
 #elif UINTPTR_MAX == 0xffffffff // 32-bit
 
-#define SSM_WORD_BITS 32
-#define SSM_WORD_SIZE 4
+#define SSM_WORD_BITS ((size_t)32)
+#define SSM_WORD_SIZE ((size_t)4)
 #define SSM_FPTR 1
 typedef float ssmFptr;
 
@@ -121,7 +121,8 @@ typedef union ssmPtrUnion {
 #define ssmHdSize(v) (((v) & SSM_SIZE_MASK) >> SSM_SIZE_SHIFT)
 
 #define ssmHdLongBytes(v) ssmHdLongSize(v)
-#define ssmHdLongWords(v) (ssmHdLongSize(v) / SSM_WORD_SIZE)
+#define ssmHdLongWords(v) \
+  ((ssmHdLongSize(v) + SSM_WORD_SIZE - 1) / SSM_WORD_SIZE)
 #define ssmHdShortBytes(v) (ssmHdSize(v) * SSM_WORD_SIZE)
 #define ssmHdShortWords(v) ssmHdSize(v)
 
@@ -146,7 +147,8 @@ typedef union ssmPtrUnion {
 #define ssmTByte(t, i) ((char*)((ssmT)t))[i]
 
 #define ssmTWords(words) (1 + words)
-#define ssmTWordsFromBytes(bytes) (1 + ((bytes + SSM_WORD_SIZE - 1) / SSM_WORD_SIZE))
+#define ssmTWordsFromBytes(bytes) \
+  (1 + ((bytes + SSM_WORD_SIZE - 1) / SSM_WORD_SIZE))
 #define SSM_MINOR_TUP_EXTRA_WORDS 1
 #define SSM_MAJOR_TUP_EXTRA_WORDS 2
 

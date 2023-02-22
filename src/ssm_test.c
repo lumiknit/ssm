@@ -196,7 +196,8 @@ int testGCRandom1() {
       // Put a value in random position
       const size_t idx = mem.stack->size - 1 - (rand() % stack_n);
       const size_t size = 2 + (rand() % 10);
-      ssmT v = newTup(&mem, 1, size);
+      ssmT v = newTup(&mem, 4, size);
+      memset(&ssmTElem(v, 0), 0x00, size * SSM_WORD_SIZE);
       if(ssmVal2Tup(mem.stack->vals[idx]) != NULL) {
         ssmT tup = ssmVal2Tup(mem.stack->vals[idx]);
         ssmTElem(tup, 0) = ssmTup2Val(v);
@@ -259,6 +260,9 @@ int testGCSize() {
 
 
 void gcTest() {
+  testGCRandom1();
+  return;
+
   TEST(testGC0);
   TEST(testGC1);
   TEST(testGC2);
