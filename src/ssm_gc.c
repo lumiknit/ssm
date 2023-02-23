@@ -123,41 +123,46 @@ static inline ssmT allocMinorLongUnchecked(Mem* mem, ssmV bytes) {
   ssmT tup = allocMinorUninited(mem, ssmTWordsFromBytes(bytes));
   // Initialize tuple header
   ssmTHd(tup) = ssmLongHd(bytes);
-  logf("(Alloc) long %p (bytes %zu)\n", tup, bytes);
-  logf("     .. Stack %zu/%zu\n", mem->minor->top, mem->minor->size);
+  logf("(Alloc) long %p (bytes %zu) => Stack %zu/%zu\n", tup, bytes, mem->minor->top, mem->minor->size);
   return tup;
 }
 
 static inline ssmT allocMinorShortUnchecked(Mem* mem, ssmV tag, ssmV words) {
   ssmT tup = allocMinorUninited(mem, ssmTWords(words));
   // Initialize tuple header
-  logf("Hd: %zx\n", ssmShortHd(tag, words));
   ssmTHd(tup) = ssmShortHd(tag, words);
-  logf("(Alloc) short %p (words %zu)\n", tup, words);
-  logf("     .. Stack %zu/%zu\n", mem->minor->top, mem->minor->size);
+  logf("(Alloc) short %p (tag %zu, words %zu) => Stack %zu/%zu\n", tup, tag, words, mem->minor->top, mem->minor->size);
   return tup;
 }
 
 typedef int (*MarkableFn)(Mem*, ssmT);
 
+static inline void markElems(Mem *mem, ssmT marked_tup, MarkableFn markable) {
+  const ssmV hd = ssmTHd(marked_tup);
+  const ssmV words = ssmHdShortWords(hd);
+  ssmV i;
+  logf("(Mark) Pick %p(%zu)[-/%zu]\n", marked_tup, ssmHdTag(hd), words);
+  for(i = 0; i < words; i++) {
+    const ssmV elem = ssmTElem(marked_tup, i);
+    logf("(Mark) Ref Exists %p(%zu)[%zu/%zu] -> 0x%zx\n", marked_tup, ssmHdTag(hd), i, words, elem);
+    if(!ssmIsGCVal(elem)) continue;
+    ssmT tup = ssmVal2Tup(elem);
+    if(!markable(mem, tup)) continue;
+    const ssmV hd = ssmTHd(tup);
+    if(ssmHdColor(hd)) continue;
+    logf("       Mark %p(%zu)[%zu/%zu] -> %p\n", marked_tup, ssmHdTag(hd), i, words, tup);
+    ssmTHd(tup) = ssmHdMarked(hd);
+    if(ssmHdIsLong(hd)) return;
+    ssmTMarkList(tup) = mem->mark_list;
+    mem->mark_list = tup;
+  }
+}
+
 static inline void markChain(Mem *mem, MarkableFn markable) {
   while(mem->mark_list != NULL) {
     ssmT marked_tup = mem->mark_list;
     mem->mark_list = ssmTMarkList(marked_tup);
-    const ssmV words = ssmHdShortWords(ssmTHd(marked_tup));
-    ssmV i;
-    for(i = 0; i < words; i++) {
-      if(!ssmIsGCVal(ssmTElem(marked_tup, i))) continue;
-      ssmT tup = ssmVal2Tup(ssmTElem(marked_tup, i));
-      if(!markable(mem, tup)) continue;
-      const ssmV hd = ssmTHd(tup);
-      if(ssmHdColor(hd)) continue;
-      logf("(Mark) Mark %p -> %p\n", marked_tup, tup);
-      ssmTHd(tup) = ssmHdMarked(hd);
-      if(ssmHdIsLong(hd)) return;
-      ssmTMarkList(tup) = mem->mark_list;
-      mem->mark_list = tup;
-    }
+    markElems(mem, marked_tup, markable);
   }
 }
 
@@ -177,15 +182,33 @@ static void markVal(Mem *mem, ssmV val, MarkableFn markable) {
 
 static void markPhase(Mem* mem, MarkableFn markable) {
   ssmV i;
-  // Clean-up all chain
+  // Clean-up all write barrier
+  logf("(Mark) --- write barrier ---\n");
+  ssmT *lst = &mem->write_barrier;
+  for(;;) {
+    const ssmT tup = *lst;
+    if(tup == NULL) break;
+    else if(ssmHdIsLong(ssmTHd(tup))) {
+      logf("(Mark) Reject long %p\n", tup);
+      *lst = ssmTMarkList(tup);
+      ssmTHd(tup) = ssmHdUnmarked(ssmTHd(tup));
+    } else if(inStack(mem->minor, tup)) {
+      logf("(Mark) Reject minor %p\n", tup);
+      *lst = ssmTMarkList(tup);
+      ssmTHd(tup) = ssmHdUnmarked(ssmTHd(tup));
+    } else {
+      lst = &ssmTMarkList(tup);
+      markElems(mem, tup, markable);
+    }
+  }
   markChain(mem, markable);
   // Mark global stack
-  logf("(Mark) Marking global stack\n");
+  logf("(Mark) --- global stack ---\n");
   for(i = 0; i < mem->global->top; i++) {
     markVal(mem, mem->global->vals[i], markable);
   }
   // Mark stack
-  logf("(Mark) Marking call stack\n");
+  logf("(Mark) --- call stack ---\n");
   for(i = mem->stack->top; i < mem->stack->size; i++) {
     markVal(mem, mem->stack->vals[i], markable);
   }
@@ -230,12 +253,13 @@ static void moveMinorToMajor(Mem* mem) {
   ssmT last_short = mem->major_list[MAJOR_LIST_NODES];
   // Then, copy all marked objects to major heap
   // and write new address into old tuple (header position)
+  logf("(Move) --- minor to major ---\n");
   ssmT ptr = mem->minor->vals + mem->minor->top + SSM_MINOR_TUP_EXTRA_WORDS;
   ssmT lim = mem->minor->vals + mem->minor->size;
   while(ptr < lim) {
     const ssmV hd = ssmTHd(ptr);
     const ssmV words = ssmHdWords(hd);
-    logf("(Move) ptr = %p, hd = 0x%zx\n", ptr, hd);
+    logf("(Move) ptr = %p, hd = 0x%zx\n", ptr, ssmTHd(ptr));
     logf("       words = %zu\n", words);
     if(ssmHdColor(hd)) { // Marked Object
       // Allocate new major
@@ -258,6 +282,7 @@ static void moveMinorToMajor(Mem* mem) {
     ptr += ssmTWords(words) + SSM_MINOR_TUP_EXTRA_WORDS;
   }
   // Traverse all short lists and readdressing
+  logf("(Move) --- traverse short ---\n");
   ssmT tup = mem->major_list[MAJOR_LIST_NODES];
   for(; tup != NULL && tup != last_short; tup = ssmTNext(tup)) {
     const ssmV words = ssmHdShortWords(ssmTHd(tup));
@@ -266,32 +291,64 @@ static void moveMinorToMajor(Mem* mem) {
       ssmV v = ssmTElem(tup, i);
       if(!ssmIsGCVal(v)) continue;
       ssmT e_tup = ssmVal2Tup(v);
+      logf("(Move) Ref %p(%zu)[%zu] = %p\n", tup, ssmHdTag(ssmTHd(tup)), i, e_tup);
       if(inStack(mem->minor, e_tup)) {
         ssmTElem(tup, i) = ssmTHd(e_tup);
+        logf("       Ref %p(%zu)[%zu] -> %p\n", tup, ssmHdTag(ssmTHd(tup)), i, (void*)ssmTElem(tup, i));
+      }
+    }
+  }
+  // Traverse all write barrier and readdressing
+  logf("(Move) --- traverse write barrier ---\n");
+  for(tup = mem->write_barrier; tup != NULL; tup = ssmTMarkList(tup)) {
+    ssmV hd = ssmTHd(tup);
+    // Unmark
+    ssmTHd(tup) = ssmHdUnmarked(hd);
+    // Readdressing
+    if(ssmHdIsLong(hd)) continue;
+    const ssmV words = ssmHdShortWords(hd);
+    ssmV i;
+    for(i = 0; i < words; i++) {
+      ssmV v = ssmTElem(tup, i);
+      if(!ssmIsGCVal(v)) continue;
+      ssmT e_tup = ssmVal2Tup(v);
+      logf("(Move) Ref %p(%zu)[%zu] = %p\n", tup, ssmHdTag(ssmTHd(tup)), i, e_tup);
+      if(inStack(mem->minor, e_tup)) {
+        ssmTElem(tup, i) = ssmTHd(e_tup);
+        logf("       Ref %p(%zu)[%zu] -> %p\n", tup, ssmHdTag(ssmTHd(tup)), i, (void*)ssmTElem(tup, i));
       }
     }
   }
   // Traverse all global & stacks and readdressing
+  logf("(Move) --- traverse global ---\n");
   ssmV i;
   for(i = 0; i < mem->global->top; i++) {
     ssmV v = mem->global->vals[i];
     if(!ssmIsGCVal(v)) continue;
     ssmT e_tup = ssmVal2Tup(v);
+    logf("(Move) Ref[%zu] = %p\n", i, e_tup);
     if(inStack(mem->minor, e_tup)) {
       mem->global->vals[i] = ssmTHd(e_tup);
+      logf("       Ref[%zu] -> %p\n", i, (void*)mem->stack->vals[i]);
     }
   }
+  logf("(Move) --- traverse stack ---\n");
   for(i = mem->stack->top; i < mem->stack->size; i++) {
     ssmV v = mem->stack->vals[i];
     if(!ssmIsGCVal(v)) continue;
     ssmT e_tup = ssmVal2Tup(v);
+    logf("(Move) Ref[%zu] = %p\n", i, e_tup);
     if(inStack(mem->minor, e_tup)) {
       mem->stack->vals[i] = ssmTHd(e_tup);
+      logf("       Ref[%zu] -> %p\n", i, (void*)mem->stack->vals[i]);
     }
   }
 }
 
 int fullGC(Mem* mem) {
+  if(mem->major_gc_count == 104) {
+    logf("a");
+  }
   logf("(Full %zd) Start\n", mem->major_gc_count);
   // Run marking phase
   logf("(Full %zd) Marking...\n", mem->major_gc_count);
@@ -309,6 +366,8 @@ int fullGC(Mem* mem) {
   // Adjust major gc threshold
   logf("(Full %zd) Updating major GC threshold...\n", mem->major_gc_count);
   updateMajorGCThreshold(mem);
+  // Clean write barrier
+  mem->write_barrier = NULL;
   // Update statistics
   logf("(Full %zd) Done\n", mem->major_gc_count);
   mem->major_gc_count++;
@@ -342,6 +401,8 @@ int minorGC(Mem* mem) {
   // Rewind minor heap's top pointer (left)
   logf("(Minor %zd) Rewinding...\n", mem->minor_gc_count);
   mem->minor->top = mem->minor->size;
+  // Clean write barrier
+  mem->write_barrier = NULL;
   // Update statistics
   logf("(Minor %zd) Done\n", mem->minor_gc_count);
   mem->minor_gc_count++;
@@ -386,20 +447,19 @@ ssmT newTup(Mem *mem, ssmV tag, ssmV words) {
 
 void gcWriteBarrier(Mem *mem, ssmT tup) {
   const ssmV hd = ssmTHd(tup);
-  if(ssmHdColor(hd) == SSM_COLOR_WHITE) {
-    logf("Write barrier: %p\n", tup);
-    // If the object is white, mark it gray
-    ssmTHd(tup) = ssmHdMarked(hd);
-    // Push to gray list
-    ssmTMarkList(tup) = mem->mark_list;
-    mem->mark_list = tup;
-  }
+  if(ssmHdColor(hd)) return;
+  logf("Write barrier: %p\n", tup);
+  // If the object is white, mark it gray
+  ssmTHd(tup) = ssmHdMarked(hd);
+  // Push to gray list
+  ssmTMarkList(tup) = mem->write_barrier;
+  mem->write_barrier = tup;
 }
 
 static void checkMemTupInvariants(ssmT tup) {
   const ssmV hd = ssmTHd(tup);
-  const ssmV words = ssmHdWords(hd);
   if(!ssmHdIsLong(hd)) {
+    const ssmV words = ssmHdShortWords(hd);
     ssmV i;
     for(i = 0; i < words; i++) {
       ssmV e = ssmTElem(tup, i);
@@ -432,6 +492,15 @@ void checkMemInvariants(Mem *mem) {
       ssmT lst = mem->major_list[m];
       for(; lst != NULL; lst = ssmTNext(lst)) {
         checkMemTupInvariants(lst);
+      }
+    }
+  }
+  { // Check traverse stack
+    ssmV i;
+    for(i = mem->stack->top; i < mem->stack->size; i++) {
+      ssmV e = mem->stack->vals[i];
+      if(e > 0x200000000ULL) {
+        panicf("Invalid value in stack[%zu/%zu]: %zu = 0x%zx\n", i, mem->stack->size, e, e);
       }
     }
   }

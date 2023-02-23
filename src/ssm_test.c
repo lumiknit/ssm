@@ -175,17 +175,17 @@ int testGCRandom1() {
     pushStackR(mem.stack, ssmTup2Val(NULL));
   }
   // Create many trees
-  const int n = 100000;
+  const int n = 1000000;
   
   for(i = 0; i < n; i++) {
     int r = rand() % 8;
-    printf("-- %6d: op %d\n", i, r);
+    //printf("-- %6d: op %d\n", i, r);
     // First take a random number and do random operation
     switch(r) {
     case 0: case 4: case 6: {
       // Create a tuple and push into stack
       const size_t size = 2 + (rand() % 10);
-      ssmT v = newTup(&mem, 1, size);
+      ssmT v = newTup(&mem, i, size);
       memset(&ssmTElem(v, 0), 0x00, size * SSM_WORD_SIZE);
       // Push it into stack
       const size_t idx = mem.stack->size - 1 - (rand() % stack_n);
@@ -196,7 +196,7 @@ int testGCRandom1() {
       // Put a value in random position
       const size_t idx = mem.stack->size - 1 - (rand() % stack_n);
       const size_t size = 2 + (rand() % 10);
-      ssmT v = newTup(&mem, 4, size);
+      ssmT v = newTup(&mem, i, size);
       memset(&ssmTElem(v, 0), 0x00, size * SSM_WORD_SIZE);
       if(ssmVal2Tup(mem.stack->vals[idx]) != NULL) {
         ssmT tup = ssmVal2Tup(mem.stack->vals[idx]);

@@ -29,7 +29,7 @@
 }
 
 // Logging helper
-#define DEBUG_LOG_ENABLED
+//#define DEBUG_LOG_ENABLED
 
 #ifdef DEBUG_LOG_ENABLED
 #define logf(...) printf(__VA_ARGS__)
@@ -93,6 +93,7 @@ typedef struct Mem {
 
   // GC template variables
   ssmT mark_list;
+  ssmT write_barrier;
 } Mem;
 
 void initMem(Mem* mem,
