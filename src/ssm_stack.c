@@ -5,11 +5,12 @@
  * @copyright This file is part of ssm.
  */
 
+#include <ssm_rt.h>
 #include <ssm_i.h>
 
-Stack* newStack(size_t size, int r2l) {
-  const size_t bytes = sizeof(Stack) + sizeof(ssmV) * (size - 1);
-  Stack* stack = aligned_alloc(SSM_WORD_SIZE, bytes);
+ssmStack* ssmNewStack(size_t size, int r2l) {
+  const size_t bytes = sizeof(ssmStack) + sizeof(ssmV) * (size - 1);
+  ssmStack* stack = aligned_alloc(SSM_WORD_SIZE, bytes);
   if(stack == NULL) {
     panicf("Failed to alloc stack of size %zu", size);
   }
@@ -18,8 +19,8 @@ Stack* newStack(size_t size, int r2l) {
   return stack;
 }
 
-Stack* extendStackToRight(Stack* stack, size_t size) {
-  const size_t bytes = sizeof(Stack) + sizeof(ssmV) * (size - 1);
+ssmStack* ssmExtendStackToRight(ssmStack* stack, size_t size) {
+  const size_t bytes = sizeof(ssmStack) + sizeof(ssmV) * (size - 1);
   stack = realloc(stack, bytes);
   if(stack == NULL) {
     panicf("Failed to alloc stack of size %zu", size);
@@ -28,18 +29,18 @@ Stack* extendStackToRight(Stack* stack, size_t size) {
   return stack;
 }
 
-Stack* extendStackToLeft(Stack* stack, size_t size) {
-  Stack *new_stack = newStack(size, 1);
+ssmStack* ssmExtendStackToLeft(ssmStack* stack, size_t size) {
+  ssmStack *new_stack = ssmNewStack(size, 1);
   size_t move_words = stack->size - stack->top;
   new_stack->top -= move_words;
   memcpy(new_stack->vals + new_stack->top,
          stack->vals + stack->top,
          move_words * sizeof(ssmV));
-  freeStack(stack);
+  ssmFreeStack(stack);
   return new_stack;
 }
 
-size_t pushStack(Stack* stack, ssmV value) {
+size_t ssmPushStack(ssmStack* stack, ssmV value) {
   // If stack overflow, return 0
   if (stack->top >= stack->size) {
     return 0;
@@ -48,29 +49,29 @@ size_t pushStack(Stack* stack, ssmV value) {
   return stack->top;
 }
 
-void pushStackForce(Stack** stack_ptr, ssmV value) {
-  Stack *stack = *stack_ptr;
+void ssmPushStackForce(ssmStack** stack_ptr, ssmV value) {
+  ssmStack *stack = *stack_ptr;
   if (stack->top >= stack->size) {
-    stack = extendStackToRight(stack, stack->size * 2);
+    stack = ssmExtendStackToRight(stack, stack->size * 2);
     *stack_ptr = stack;
   }
   stack->vals[stack->top++] = value;
 }
 
-ssmV popStack(Stack* stack) {
+ssmV ssmPopStack(ssmStack* stack) {
   if(stack->top == 0) {
     panic("Stack underflow");
   }
   return stack->vals[--stack->top];
 }
 
-size_t pushStackR(Stack* stack, ssmV value) {
+size_t ssmPushStackR(ssmStack* stack, ssmV value) {
   // R is unchecked
   stack->vals[--stack->top] = value;
   return stack->top;
 }
 
-ssmV popStackR(Stack* stack) {
+ssmV ssmPopStackR(ssmStack* stack) {
   // R is unchecked
   return stack->vals[stack->top++];
 }

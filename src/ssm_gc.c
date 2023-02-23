@@ -33,11 +33,12 @@
  */
 
 
+#include <ssm_rt.h>
 #include <ssm_i.h>
 
 // -- Initialization / Finalization
 
-void updateMajorGCThreshold(Mem* mem) {
+void ssmUpdateMajorGCThreshold(ssmMem* mem) {
   // If major_gc_threshold_percent is 0, disable major GC
   if(mem->major_gc_threshold_percent == 0) {
     mem->major_gc_threshold_words = SIZE_MAX;
@@ -50,7 +51,7 @@ void updateMajorGCThreshold(Mem* mem) {
     percent = SIZE_MAX;
   }
   // Set major gc thresold to minimum major heap size
-  mem->major_gc_threshold_words = mem->minor->size * MIN_MAJOR_HEAP_FACTOR;
+  mem->major_gc_threshold_words = mem->minor->size * GC_MIN_MAJOR_HEAP_FACTOR;
   // To calculate percentage, split allocated into two part
   const size_t lo = mem->major_allocated_words % 100;
   const size_t hi = mem->major_allocated_words / 100;
@@ -74,32 +75,32 @@ void updateMajorGCThreshold(Mem* mem) {
   }
 }
 
-void initMem(Mem* mem,
+void ssmInitMem(ssmMem* mem,
   size_t minor_heap_words,
   size_t major_gc_threshold_percent,
   size_t stack_size,
   size_t global_size) {
-  memset(mem, 0, sizeof(Mem));
+  memset(mem, 0, sizeof(ssmMem));
 
-  mem->minor = newStack(minor_heap_words, 1);
+  mem->minor = ssmNewStack(minor_heap_words, 1);
 
   mem->major_gc_threshold_percent = major_gc_threshold_percent;
-  mem->stack = newStack(stack_size, 1);
-  mem->global = newStack(global_size, 0);
+  mem->stack = ssmNewStack(stack_size, 1);
+  mem->global = ssmNewStack(global_size, 0);
 
-  updateMajorGCThreshold(mem);
+  ssmUpdateMajorGCThreshold(mem);
 }
 
-void finiMem(Mem* mem) {
+void ssmFiniMem(ssmMem* mem) {
   // Free minor heap
   if(mem->minor != NULL) {
-    freeStack(mem->minor);
+    ssmFreeStack(mem->minor);
     mem->minor = NULL;
   }
   // Free major heap
   int m;
   ssmT i, t;
-  for(m = 0; m < MAJOR_LIST_KINDS; m++) {
+  for(m = 0; m < SSM_MAJOR_LIST_KINDS; m++) {
     for(i = mem->major_list[m]; i != NULL; i = t) {
       t = ssmTNext(i);
       free(i - SSM_MAJOR_TUP_EXTRA_WORDS);
@@ -108,18 +109,18 @@ void finiMem(Mem* mem) {
   }
   // Free stacks
   if(mem->stack != NULL) {
-    freeStack(mem->stack);
+    ssmFreeStack(mem->stack);
     mem->stack = NULL;
   }
   if(mem->global != NULL) {
-    freeStack(mem->global);
+    ssmFreeStack(mem->global);
     mem->global = NULL;
   }
 }
 
 // -- Allocation helpers
 
-static inline ssmT allocMajorUninited(Mem* mem, ssmV words, int kind) {
+static inline ssmT allocMajorUninited(ssmMem* mem, ssmV words, int kind) {
   // Allocate a tuple in major heap without initialization
   // kind is one of MAJOR_LIST_*
   // Also words must include header size (using ssmTWords*)
@@ -138,20 +139,20 @@ static inline ssmT allocMajorUninited(Mem* mem, ssmV words, int kind) {
   return tup;
 }
 
-static inline ssmT allocMajorLong(Mem* mem, ssmV bytes) {
+static inline ssmT allocMajorLong(ssmMem* mem, ssmV bytes) {
   const size_t words = ssmTWordsFromBytes(bytes);
-  ssmT tup = allocMajorUninited(mem, words, MAJOR_LIST_LEAVES);
+  ssmT tup = allocMajorUninited(mem, words, SSM_MAJOR_LIST_LEAVES);
   ssmTHd(tup) = ssmLongHd(bytes);
   return tup;
 }
 
-static inline ssmT allocMajorShort(Mem* mem, ssmV tag, ssmV words) {
-  ssmT tup = allocMajorUninited(mem, ssmTWords(words), MAJOR_LIST_NODES);
+static inline ssmT allocMajorShort(ssmMem* mem, ssmV tag, ssmV words) {
+  ssmT tup = allocMajorUninited(mem, ssmTWords(words), SSM_MAJOR_LIST_NODES);
   ssmTHd(tup) = ssmShortHd(tag, words);
   return tup;
 }
 
-static inline ssmT allocMinorUninited(Mem *mem, ssmV words) {
+static inline ssmT allocMinorUninited(ssmMem *mem, ssmV words) {
   // ALlocate tuple in minor heap without initialization
   // Also words must include header size (using ssmTWords*)
   mem->minor->top -= words + SSM_MINOR_TUP_EXTRA_WORDS;
@@ -159,7 +160,7 @@ static inline ssmT allocMinorUninited(Mem *mem, ssmV words) {
   return top + SSM_MINOR_TUP_EXTRA_WORDS;
 }
 
-static inline ssmT allocMinorLongUnchecked(Mem* mem, ssmV bytes) {
+static inline ssmT allocMinorLongUnchecked(ssmMem* mem, ssmV bytes) {
   // Note: it does not check if free space of minor heap is enough!
   ssmT tup = allocMinorUninited(mem, ssmTWordsFromBytes(bytes));
   // Initialize tuple header
@@ -168,7 +169,7 @@ static inline ssmT allocMinorLongUnchecked(Mem* mem, ssmV bytes) {
   return tup;
 }
 
-static inline ssmT allocMinorShortUnchecked(Mem* mem, ssmV tag, ssmV words) {
+static inline ssmT allocMinorShortUnchecked(ssmMem* mem, ssmV tag, ssmV words) {
   // Note: it does not check if free space of minor heap is enough!
   ssmT tup = allocMinorUninited(mem, ssmTWords(words));
   // Initialize tuple header
@@ -179,9 +180,9 @@ static inline ssmT allocMinorShortUnchecked(Mem* mem, ssmV tag, ssmV words) {
 
 // -- GC Marking Phase
 
-typedef int (*MarkableFn)(Mem*, ssmT);
+typedef int (*MarkableFn)(ssmMem*, ssmT);
 
-static inline void markAndPush(Mem *mem, ssmV val, MarkableFn markable) {
+static inline void markAndPush(ssmMem *mem, ssmV val, MarkableFn markable) {
   // Try to mark val.
   // If it succeed & may contains other tuples (i.e. short object),
   // push it into mark list.
@@ -198,7 +199,7 @@ static inline void markAndPush(Mem *mem, ssmV val, MarkableFn markable) {
   mem->mark_list = tup;
 }
 
-static inline void markElems(Mem *mem, ssmT marked_tup, MarkableFn markable) {
+static inline void markElems(ssmMem *mem, ssmT marked_tup, MarkableFn markable) {
   // Mark all elements of marked_tup (it must be short tuple)
   // Note that if marked_tup is not marked, inf-loop may occur
   // Extract headers and number of elements
@@ -214,7 +215,7 @@ static inline void markElems(Mem *mem, ssmT marked_tup, MarkableFn markable) {
   }
 }
 
-static void markPhase(Mem* mem, MarkableFn markable) {
+static void markPhase(ssmMem* mem, MarkableFn markable) {
   ssmV i;
   // Traverse write barrier and mark all elements
   gcLogf("(Mark) --- write barrier ---\n");
@@ -222,7 +223,7 @@ static void markPhase(Mem* mem, MarkableFn markable) {
   for(;;) {
     const ssmT tup = *lst;
     if(tup == NULL) break;
-    else if(ssmHdIsLong(ssmTHd(tup)) || inStack(mem->minor, tup)) {
+    else if(ssmHdIsLong(ssmTHd(tup)) || ssmInStack(mem->minor, tup)) {
       // Long tuple are rejected because it cannot contain other tuples
       // Tuple in minor heap are rejected because write barrier list may
       // corrupted by copying minor heap to major heap, and they are markable
@@ -253,24 +254,24 @@ static void markPhase(Mem* mem, MarkableFn markable) {
   }
 }
 
-static int markableMajor(Mem* mem, ssmT tup) {
+static int markableMajor(ssmMem* mem, ssmT tup) {
   // During major GC, all tuples (except NULL pointer) are markable
   (void) mem;
   return tup != NULL;
 }
 
-static int markableMinor(Mem* mem, ssmT tup) {
+static int markableMinor(ssmMem* mem, ssmT tup) {
   // During minor GC, only tuples in minor heap are markable
-  return inStack(mem->minor, tup);
+  return ssmInStack(mem->minor, tup);
 }
 
 // -- GC Free Unmarked Major Phase
 
-static void freeUnmarkedMajor(Mem* mem) {
+static void freeUnmarkedMajor(ssmMem* mem) {
   // Free all unmarked (= unreachable) tuples in major heap
   // If some tuples are marked (= reachable), unmark them for next GC.
   ssmV m;
-  for(m = MAJOR_LIST_LEAVES; m <= MAJOR_LIST_NODES; m++) {
+  for(m = SSM_MAJOR_LIST_LEAVES; m <= SSM_MAJOR_LIST_NODES; m++) {
     ssmT *lst = &mem->major_list[m];
     for(;;) {
       ssmT next = *lst;
@@ -298,21 +299,21 @@ static void freeUnmarkedMajor(Mem* mem) {
 
 // -- GC Move Minor to Major Phase
 
-static inline void readdressMovedTuple(Mem *mem, ssmV *val) {
+static inline void readdressMovedTuple(ssmMem *mem, ssmV *val) {
   const ssmV v = *val;
   if(!ssmIsGCVal(v)) return;
   ssmT e_tup = ssmVal2Tup(v);
   gcLogf("(Move) Ref *%p = %p\n", val, e_tup);
-  if(!inStack(mem->minor, e_tup)) return;
+  if(!ssmInStack(mem->minor, e_tup)) return;
   *val = ssmTHd(e_tup);
   gcLogf("       -> %p\n", ssmVal2Tup(*val));
 }
 
-static void moveMinorToMajor(Mem* mem) {
+static void moveMinorToMajor(ssmMem* mem) {
   // First, record last short list
   // It is the first element of old major tuples
   // = the next element of new major tuples
-  ssmT last_short = mem->major_list[MAJOR_LIST_NODES];
+  ssmT last_short = mem->major_list[SSM_MAJOR_LIST_NODES];
   // Then, copy all marked objects to major heap
   // and write new address into old tuple (header position)
   gcLogf("(Move) --- minor to major ---\n");
@@ -345,7 +346,7 @@ static void moveMinorToMajor(Mem* mem) {
   }
   // Traverse all short lists and readdressing
   gcLogf("(Move) --- traverse short ---\n");
-  ssmT tup = mem->major_list[MAJOR_LIST_NODES];
+  ssmT tup = mem->major_list[SSM_MAJOR_LIST_NODES];
   for(; tup != NULL && tup != last_short; tup = ssmTNext(tup)) {
     const ssmV words = ssmHdShortWords(ssmTHd(tup));
     gcLogf("(Move) Moved minor tup %p (%zu)\n", tup, words);
@@ -382,7 +383,7 @@ static void moveMinorToMajor(Mem* mem) {
 
 // -- GC APIs
 
-int fullGC(Mem* mem) {
+int ssmFullGC(ssmMem* mem) {
   gcLogf("(Full %zd) Start\n", mem->major_gc_count);
   // Run marking phase
   gcLogf("(Full %zd) Marking...\n", mem->major_gc_count);
@@ -399,7 +400,7 @@ int fullGC(Mem* mem) {
   mem->minor->top = mem->minor->size;
   // Adjust major gc threshold
   gcLogf("(Full %zd) Updating major GC threshold...\n", mem->major_gc_count);
-  updateMajorGCThreshold(mem);
+  ssmUpdateMajorGCThreshold(mem);
   // Clean write barrier
   mem->write_barrier = NULL;
   // Update statistics
@@ -408,7 +409,7 @@ int fullGC(Mem* mem) {
   return 0;
 }
 
-int minorGC(Mem* mem) {
+int ssmMinorGC(ssmMem* mem) {
   gcLogf("(Minor %zd) Start\n", mem->minor_gc_count);
   // Check major heap is full
   size_t minor_allocated = mem->minor->size - mem->minor->top;
@@ -424,7 +425,7 @@ int minorGC(Mem* mem) {
   if(major_allocated_guess >= mem->major_gc_threshold_words) {
     // Major heap is full, do full GC
     gcLogf("(Minor %zd) Run full GC\n", mem->minor_gc_count);
-    return fullGC(mem);
+    return ssmFullGC(mem);
   }
   // Run marking phase
   gcLogf("(Minor %zd) Marking...\n", mem->minor_gc_count);
@@ -445,7 +446,7 @@ int minorGC(Mem* mem) {
 
 // -- Allocations APIs
 
-ssmT newLongTup(Mem *mem, ssmV bytes) {
+ssmT ssmNewLongTup(ssmMem *mem, ssmV bytes) {
   // Get size
   const size_t size = ssmTWordsFromBytes(bytes) + SSM_MINOR_TUP_EXTRA_WORDS;
   // Shortcut to allocate
@@ -457,12 +458,12 @@ ssmT newLongTup(Mem *mem, ssmV bytes) {
   } else {
     // Minor heap is enough, but not enough space
     // Do minor GC
-    minorGC(mem);
+    ssmMinorGC(mem);
     return allocMinorLongUnchecked(mem, bytes);
   }
 }
 
-ssmT newTup(Mem *mem, ssmV tag, ssmV words) {
+ssmT ssmNewTup(ssmMem *mem, ssmV tag, ssmV words) {
   // Get size
   const size_t size = ssmTWords(words) + SSM_MINOR_TUP_EXTRA_WORDS;
   // Shortcut to allocate
@@ -471,19 +472,19 @@ ssmT newTup(Mem *mem, ssmV tag, ssmV words) {
   } else if(mem->minor->size < size) {
     // Minor heap is not enough
     // In this case, first run minor GC for invariant
-    if(minorGC(mem) < 0) {
+    if(ssmMinorGC(mem) < 0) {
       panic("Minor GC failed");
     }
     return allocMajorShort(mem, tag, words);
   } else {
-    minorGC(mem);
+    ssmMinorGC(mem);
     return allocMinorShortUnchecked(mem, tag, words);
   }
 }
 
 // -- Write Barriers
 
-void gcWriteBarrier(Mem *mem, ssmT tup) {
+void ssmGCWriteBarrier(ssmMem *mem, ssmT tup) {
   const ssmV hd = ssmTHd(tup);
   if(ssmHdColor(hd)) return;
   gcLogf("Write barrier: %p\n", tup);
@@ -510,7 +511,7 @@ static void checkMemTupInvariants(ssmT tup) {
   }
 }
 
-void checkMemInvariants(Mem *mem) {
+void ssmCheckMemInvariants(ssmMem *mem) {
   // Test functions
   { // Check traverse minor heap
     ssmT ptr = mem->minor->vals + mem->minor->top;
@@ -529,7 +530,7 @@ void checkMemInvariants(Mem *mem) {
   }
   { // Check traverse major heap
     ssmV m;
-    for(m = 0; m < MAJOR_LIST_KINDS; m++) {
+    for(m = 0; m < SSM_MAJOR_LIST_KINDS; m++) {
       ssmT lst = mem->major_list[m];
       for(; lst != NULL; lst = ssmTNext(lst)) {
         checkMemTupInvariants(lst);

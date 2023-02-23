@@ -5,6 +5,7 @@
  * @copyright This file is part of ssm.
  */
 
+#include <ssm.h>
 #include <ssm_i.h>
 
 int main() {

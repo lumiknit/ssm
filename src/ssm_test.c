@@ -1,3 +1,4 @@
+#include <ssm.h>
 #include <ssm_i.h>
 
 #define ASSERT(cond) \
@@ -80,10 +81,10 @@ void valueTest() {
 // GC Test
 
 int testGC0() {
-  Mem mem;
-  initMem(&mem, 1024, 50, 1024, 1024);
-  newTup(&mem, 1, 42);
-  finiMem(&mem);
+  ssmMem mem;
+  ssmInitMem(&mem, 1024, 50, 1024, 1024);
+  ssmNewTup(&mem, 1, 42);
+  ssmFiniMem(&mem);
   return 0;
 }
 
@@ -91,47 +92,47 @@ int testGC1() {
   // Check minor allocation gap
   size_t word_size = sizeof(void*);
   ASSERT_EQ(word_size, SSM_WORD_SIZE);
-  Mem mem;
-  initMem(&mem, 1024, 50, 1024, 1024);
-  ssmT v1 = newTup(&mem, 1, 8);
-  ssmT v2 = newTup(&mem, 1, 4);
-  ssmT v3 = newTup(&mem, 1, 7);
-  ssmT v4 = newLongTup(&mem, 2 + word_size * 3);
-  ssmT v5 = newTup(&mem, 1, 1);
+  ssmMem mem;
+  ssmInitMem(&mem, 1024, 50, 1024, 1024);
+  ssmT v1 = ssmNewTup(&mem, 1, 8);
+  ssmT v2 = ssmNewTup(&mem, 1, 4);
+  ssmT v3 = ssmNewTup(&mem, 1, 7);
+  ssmT v4 = ssmNewLongTup(&mem, 2 + word_size * 3);
+  ssmT v5 = ssmNewTup(&mem, 1, 1);
   ASSERT_EQ(v5 + 3, v4);
   ASSERT_EQ(v4 + 6, v3);
   ASSERT_EQ(v3 + 9, v2);
   ASSERT_EQ(v2 + 6, v1);
   ASSERT_EQ(v1, ((ssmT)mem.minor->vals) + (mem.minor->size - 9));
-  finiMem(&mem);
+  ssmFiniMem(&mem);
   return 0;
 }
 
 int testGC2() {
   // Run minor GC many times
-  Mem mem;
-  initMem(&mem, 32, 50, 1024, 1024);
+  ssmMem mem;
+  ssmInitMem(&mem, 32, 50, 1024, 1024);
   int i;
   for(i = 0; i < 10000; i++) {
-    newTup(&mem, 1, 20);
+    ssmNewTup(&mem, 1, 20);
   }
-  finiMem(&mem);
+  ssmFiniMem(&mem);
   return 0;
 }
 
 int testGC3() {
   // Run GC a few times
-  Mem mem;
-  initMem(&mem, 100, 50, 1024, 1024);
+  ssmMem mem;
+  ssmInitMem(&mem, 100, 50, 1024, 1024);
   // Create tuples
-  newTup(&mem, 1, 5);
-  ssmT v2 = newTup(&mem, 2, 5);
-  newTup(&mem, 3, 5);
-  ssmT v4 = newTup(&mem, 4, 5);
-  newTup(&mem, 5, 5);
+  ssmNewTup(&mem, 1, 5);
+  ssmT v2 = ssmNewTup(&mem, 2, 5);
+  ssmNewTup(&mem, 3, 5);
+  ssmT v4 = ssmNewTup(&mem, 4, 5);
+  ssmNewTup(&mem, 5, 5);
   // Only save v2 and v4
-  pushStackR(mem.stack, ssmTup2Val(v2));
-  pushStackR(mem.stack, ssmTup2Val(v4));
+  ssmPushStackR(mem.stack, ssmTup2Val(v2));
+  ssmPushStackR(mem.stack, ssmTup2Val(v4));
   logf("%zx\n", ssmTHd(v2));
   ASSERT_EQ(ssmHdTag(ssmTHd(v2)), 2);
   ASSERT_EQ(ssmHdTag(ssmTHd(v4)), 4);
@@ -139,8 +140,8 @@ int testGC3() {
   int i;
   for(i = 0; i < 3; i++) {
     // Clean up other tuples
-    if(i == 2) fullGC(&mem);
-    else minorGC(&mem);
+    if(i == 2) ssmFullGC(&mem);
+    else ssmMinorGC(&mem);
     // Then v2 and v4 should be moved into major heap
     ssmT nv2 = ssmVal2Tup(mem.stack->vals[mem.stack->size - 1]);
     ssmT nv4 = ssmVal2Tup(mem.stack->vals[mem.stack->size - 2]);
@@ -156,23 +157,23 @@ int testGC3() {
     ASSERT_EQ(mem.major_allocated_words, 2 * (SSM_MAJOR_TUP_EXTRA_WORDS + 6));
   }
   // Clean-up
-  popStackR(mem.stack);
-  popStackR(mem.stack);
-  fullGC(&mem);
+  ssmPopStackR(mem.stack);
+  ssmPopStackR(mem.stack);
+  ssmFullGC(&mem);
   ASSERT_EQ(mem.major_allocated_words, 0);
-  finiMem(&mem);
+  ssmFiniMem(&mem);
   return 0;
 }
 
 int testGCRandom1() {
   int i;
   // Init
-  Mem mem;
-  initMem(&mem, 100, 50, 128, 128);
+  ssmMem mem;
+  ssmInitMem(&mem, 100, 50, 128, 128);
   const int stack_n = 4;
   // Push some NULL in stack
   for(i = 0; i < stack_n; i++) {
-    pushStackR(mem.stack, ssmTup2Val(NULL));
+    ssmPushStackR(mem.stack, ssmTup2Val(NULL));
   }
   // Create many trees
   const int n = 1000000;
@@ -185,7 +186,7 @@ int testGCRandom1() {
     case 0: case 4: case 6: {
       // Create a tuple and push into stack
       const size_t size = 2 + (rand() % 10);
-      ssmT v = newTup(&mem, i, size);
+      ssmT v = ssmNewTup(&mem, i, size);
       memset(&ssmTElem(v, 0), 0x00, size * SSM_WORD_SIZE);
       // Push it into stack
       const size_t idx = mem.stack->size - 1 - (rand() % stack_n);
@@ -196,12 +197,12 @@ int testGCRandom1() {
       // Put a value in random position
       const size_t idx = mem.stack->size - 1 - (rand() % stack_n);
       const size_t size = 2 + (rand() % 10);
-      ssmT v = newTup(&mem, i, size);
+      ssmT v = ssmNewTup(&mem, i, size);
       memset(&ssmTElem(v, 0), 0x00, size * SSM_WORD_SIZE);
       if(ssmVal2Tup(mem.stack->vals[idx]) != NULL) {
         ssmT tup = ssmVal2Tup(mem.stack->vals[idx]);
         ssmTElem(tup, 0) = ssmTup2Val(v);
-        gcWriteBarrier(&mem, tup);
+        ssmGCWriteBarrier(&mem, tup);
       }
     } break;
     case 2: {
@@ -211,24 +212,24 @@ int testGCRandom1() {
     } break;
     case 3: {
       // Just alloc
-      newLongTup(&mem, 10 + rand() % 100);
+      ssmNewLongTup(&mem, 10 + rand() % 100);
     } break;
     }
-    checkMemInvariants(&mem);
+    ssmCheckMemInvariants(&mem);
   }
   logf("Minor top/size: %zu/%zu words\n", mem.minor->top, mem.minor->size);
   logf("Major Allocated: %zu words\n", mem.major_allocated_words);
   // Fin
-  finiMem(&mem);
+  ssmFiniMem(&mem);
   return 0;
 }
 
 int testGCSize() {
   ASSERT_EQ(SSM_WORD_SIZE, sizeof(void*));
-  Mem mem;
-  initMem(&mem, 10, 50, 1024, 1024);
+  ssmMem mem;
+  ssmInitMem(&mem, 10, 50, 1024, 1024);
   ASSERT_EQ(mem.major_gc_threshold_percent, 50);
-  ASSERT_EQ(mem.major_gc_threshold_words, 10 * MIN_MAJOR_HEAP_FACTOR);
+  ASSERT_EQ(mem.major_gc_threshold_words, 10 * GC_MIN_MAJOR_HEAP_FACTOR);
   // Check for multiple cases
   const size_t as[] = {121, 2521, 7721, 20000, 30000, 71201, 500000, 1775126};
   const size_t ps[] = {20, 50, 77, 100, 225, 333, 1000};
@@ -239,26 +240,26 @@ int testGCSize() {
     // Change threshold percent
     for(j = 0; j < sizeof(ps) / sizeof(size_t); j++) {
       mem.major_gc_threshold_percent = ps[j];
-      updateMajorGCThreshold(&mem);
+      ssmUpdateMajorGCThreshold(&mem);
       ASSERT_EQ(mem.major_gc_threshold_words, as[i] * (100 + ps[j]) / 100);
     }
   }
   // Check overflow 1
   mem.major_allocated_words = 10 + SIZE_MAX / 2;
   mem.major_gc_threshold_percent = 100;
-  updateMajorGCThreshold(&mem);
+  ssmUpdateMajorGCThreshold(&mem);
   ASSERT_EQ(mem.major_gc_threshold_words, SIZE_MAX);
   // Check overflow 2
   mem.major_allocated_words = 100;
   mem.major_gc_threshold_percent = SIZE_MAX;
-  updateMajorGCThreshold(&mem);
+  ssmUpdateMajorGCThreshold(&mem);
   ASSERT_EQ(mem.major_gc_threshold_words, SIZE_MAX);
   // Non-overflow
   mem.major_allocated_words = 1;
   mem.major_gc_threshold_percent = SIZE_MAX - 100;
-  updateMajorGCThreshold(&mem);
+  ssmUpdateMajorGCThreshold(&mem);
   ASSERT_EQ(mem.major_gc_threshold_words, SIZE_MAX / 100);
-  finiMem(&mem);
+  ssmFiniMem(&mem);
   return 0;
 }
 
