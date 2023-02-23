@@ -264,9 +264,6 @@ int testGCSize() {
 
 
 void gcTest() {
-  testGCRandom1();
-  return;
-
   TEST(testGC0);
   TEST(testGC1);
   TEST(testGC2);

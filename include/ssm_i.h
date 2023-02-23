@@ -63,6 +63,15 @@ ssmV popStackR(Stack* stack);
 
 // GC
 
+// Logging helper
+#define DEBUG_GC_LOG_ENABLED
+
+#ifdef DEBUG_GC_LOG_ENABLED
+#define gcLogf(...) printf(__VA_ARGS__)
+#else
+#define gcLogf(...) ((void)0)
+#endif
+
 #define MIN_MAJOR_HEAP_FACTOR 7
 
 typedef struct Mem {
