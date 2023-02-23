@@ -279,6 +279,68 @@ int testGCRandom1() {
   return 0;
 }
 
+int testGCRandom2() {
+  int i;
+  // Init
+  ssmMem mem;
+  ssmInitMem(&mem, 16384, 75, 128, 128);
+  const int stack_n = 4;
+  // Push some NULL in stack
+  for(i = 0; i < stack_n; i++) {
+    ssmPushStackR(mem.stack, ssmTup2Val(NULL));
+  }
+  // Create many trees
+  const int n = 1000000;
+  
+  for(i = 0; i < n; i++) {
+    if(i % 10000 == 0) {
+      printf("%5d0k: (min %5zu maj %3zu) (maj allocated %10zu / %10zu)\n", i / 1000, mem.minor_gc_count, mem.major_gc_count, mem.major_allocated_words, mem.major_gc_threshold_words);
+    }
+    int r = rand() % 32;
+    if(r > 7) r = 0;
+    //printf("-- %6d: op %d\n", i, r);
+    // First take a random number and do random operation
+    switch(r) {
+    case 0: case 4: case 6: {
+      // Create a tuple and push into stack
+      const size_t size = 2 + (rand() % 10);
+      ssmT v = ssmNewTup(&mem, i, size);
+      memset(&ssmTElem(v, 0), 0x00, size * SSM_WORD_SIZE);
+      // Push it into stack
+      const size_t idx = mem.stack->size - 1 - (rand() % stack_n);
+      ssmTElem(v, rand() % size) = mem.stack->vals[idx];
+      mem.stack->vals[idx] = ssmTup2Val(v);
+    } break;
+    case 1: case 5: case 7: {
+      // Put a value in random position
+      /*const size_t idx = mem.stack->size - 1 - (rand() % stack_n);
+      const size_t size = 2 + (rand() % 10);
+      ssmT v = ssmNewTup(&mem, i, size);
+      memset(&ssmTElem(v, 0), 0x00, size * SSM_WORD_SIZE);
+      if(ssmVal2Tup(mem.stack->vals[idx]) != NULL) {
+        ssmT tup = ssmVal2Tup(mem.stack->vals[idx]);
+        ssmTElem(tup, 0) = ssmTup2Val(v);
+        ssmGCWriteBarrier(&mem, tup);
+      }*/
+    } break;
+    case 2: {
+      // Remove random index
+      const size_t idx = mem.stack->size - 1 - (rand() % stack_n);
+      mem.stack->vals[idx] = ssmTup2Val(NULL);
+    } break;
+    case 3: {
+      // Just alloc
+      ssmNewLongTup(&mem, 10 + rand() % 100);
+    } break;
+    }
+  }
+  logf("Minor top/size: %zu/%zu words\n", mem.minor->top, mem.minor->size);
+  logf("Major Allocated: %zu words\n", mem.major_allocated_words);
+  // Fin
+  ssmFiniMem(&mem);
+  return 0;
+}
+
 int testGCSize() {
   ASSERT_EQ(SSM_WORD_SIZE, sizeof(void*));
   ssmMem mem;
@@ -325,6 +387,7 @@ void gcTest() {
   TEST(testGC2);
   TEST(testGC3);
   TEST(testGCRandom1);
+  TEST(testGCRandom2);
   TEST(testGCSize);
 }
 
