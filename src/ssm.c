@@ -9,6 +9,14 @@
 #include <ssm_i.h>
 
 int main() {
+  ssmVM vm;
+  ssmConfig config;
+  ssmLoadDefaultConfig(&config);
+  ssmInitVM(&vm, &config);
+  ssmRunVM(&vm, 0);
+
   unimplemented();
+
+  ssmFiniVM(&vm);
   return 0;
 }
