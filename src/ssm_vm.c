@@ -8,3 +8,6 @@
 #include <ssm.h>
 #include <ssm_i.h>
 
+void ssmRunVM() {
+  
+}

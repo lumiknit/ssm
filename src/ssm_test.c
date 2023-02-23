@@ -80,6 +80,61 @@ void valueTest() {
 // ---------------------------------------------------------
 // GC Test
 
+
+// -- Checking helpers
+
+static void checkMemTupInvariants(ssmT tup) {
+  const ssmV hd = ssmTHd(tup);
+  if(!ssmHdIsLong(hd)) {
+    const ssmV words = ssmHdShortWords(hd);
+    ssmV i;
+    for(i = 0; i < words; i++) {
+      ssmV e = ssmTElem(tup, i);
+      if(e > 0x200000000ULL) {
+        panicf("Invalid value in tup %p[%zu/%zu]: %zu = 0x%zx\n",
+          tup, i, words, e, e);
+      }
+    }
+  }
+}
+
+void ssmCheckMemInvariants(ssmMem *mem) {
+  // Test functions
+  { // Check traverse minor heap
+    ssmT ptr = mem->minor->vals + mem->minor->top;
+    ssmT lim = mem->minor->vals + mem->minor->size;
+    while(ptr < lim) {
+      const ssmT tup = ptr + SSM_MINOR_TUP_EXTRA_WORDS;
+      const ssmV hd = ssmTHd(tup);
+      const ssmV words = ssmHdWords(hd);
+      const ssmV twords = ssmTWords(words);
+      checkMemTupInvariants(tup);
+      ptr += twords + SSM_MINOR_TUP_EXTRA_WORDS;
+    }
+    if(ptr != lim) {
+      panic("Minor heap headers may be corrupted");
+    }
+  }
+  { // Check traverse major heap
+    ssmV m;
+    for(m = 0; m < SSM_MAJOR_LIST_KINDS; m++) {
+      ssmT lst = mem->major_list[m];
+      for(; lst != NULL; lst = ssmTNext(lst)) {
+        checkMemTupInvariants(lst);
+      }
+    }
+  }
+  { // Check traverse stack
+    ssmV i;
+    for(i = mem->stack->top; i < mem->stack->size; i++) {
+      ssmV e = mem->stack->vals[i];
+      if(e > 0x200000000ULL) {
+        panicf("Invalid value in stack[%zu/%zu]: %zu = 0x%zx\n", i, mem->stack->size, e, e);
+      }
+    }
+  }
+}
+
 int testGC0() {
   ssmMem mem;
   ssmInitMem(&mem, 1024, 50, 1024, 1024);

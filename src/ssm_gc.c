@@ -165,7 +165,8 @@ static inline ssmT allocMinorLongUnchecked(ssmMem* mem, ssmV bytes) {
   ssmT tup = allocMinorUninited(mem, ssmTWordsFromBytes(bytes));
   // Initialize tuple header
   ssmTHd(tup) = ssmLongHd(bytes);
-  gcLogf("(Alloc) long %p (bytes %zu) => Stack %zu/%zu\n", tup, bytes, mem->minor->top, mem->minor->size);
+  gcLogf("(Alloc) long %p (bytes %zu) => Stack %zu/%zu\n",
+    tup, bytes, mem->minor->top, mem->minor->size);
   return tup;
 }
 
@@ -174,7 +175,8 @@ static inline ssmT allocMinorShortUnchecked(ssmMem* mem, ssmV tag, ssmV words) {
   ssmT tup = allocMinorUninited(mem, ssmTWords(words));
   // Initialize tuple header
   ssmTHd(tup) = ssmShortHd(tag, words);
-  gcLogf("(Alloc) short %p (tag %zu, words %zu) => Stack %zu/%zu\n", tup, tag, words, mem->minor->top, mem->minor->size);
+  gcLogf("(Alloc) short %p (tag %zu, words %zu) => Stack %zu/%zu\n",
+    tup, tag, words, mem->minor->top, mem->minor->size);
   return tup;
 }
 
@@ -199,7 +201,11 @@ static inline void markAndPush(ssmMem *mem, ssmV val, MarkableFn markable) {
   mem->mark_list = tup;
 }
 
-static inline void markElems(ssmMem *mem, ssmT marked_tup, MarkableFn markable) {
+static inline void markElems(
+  ssmMem *mem,
+  ssmT marked_tup,
+  MarkableFn markable
+) {
   // Mark all elements of marked_tup (it must be short tuple)
   // Note that if marked_tup is not marked, inf-loop may occur
   // Extract headers and number of elements
@@ -210,7 +216,8 @@ static inline void markElems(ssmMem *mem, ssmT marked_tup, MarkableFn markable) 
   // Loop over all elements
   for(i = 0; i < words; i++) {
     const ssmV elem = ssmTElem(marked_tup, i);
-    gcLogf("(Mark) Ref Exists %p(%zu)[%zu/%zu] -> 0x%zx\n", marked_tup, ssmHdTag(hd), i, words, elem);
+    gcLogf("(Mark) Ref Exists %p(%zu)[%zu/%zu] -> 0x%zx\n",
+      marked_tup, ssmHdTag(hd), i, words, elem);
     markAndPush(mem, elem, markable);
   }
 }
@@ -493,57 +500,4 @@ void ssmGCWriteBarrier(ssmMem *mem, ssmT tup) {
   // Push to write_barrier list
   ssmTMarkList(tup) = mem->write_barrier;
   mem->write_barrier = tup;
-}
-
-// -- Checking helpers
-
-static void checkMemTupInvariants(ssmT tup) {
-  const ssmV hd = ssmTHd(tup);
-  if(!ssmHdIsLong(hd)) {
-    const ssmV words = ssmHdShortWords(hd);
-    ssmV i;
-    for(i = 0; i < words; i++) {
-      ssmV e = ssmTElem(tup, i);
-      if(e > 0x200000000ULL) {
-        panicf("Invalid value in tup %p[%zu/%zu]: %zu = 0x%zx\n", tup, i, words, e, e);
-      }
-    }
-  }
-}
-
-void ssmCheckMemInvariants(ssmMem *mem) {
-  // Test functions
-  { // Check traverse minor heap
-    ssmT ptr = mem->minor->vals + mem->minor->top;
-    ssmT lim = mem->minor->vals + mem->minor->size;
-    while(ptr < lim) {
-      const ssmT tup = ptr + SSM_MINOR_TUP_EXTRA_WORDS;
-      const ssmV hd = ssmTHd(tup);
-      const ssmV words = ssmHdWords(hd);
-      const ssmV twords = ssmTWords(words);
-      checkMemTupInvariants(tup);
-      ptr += twords + SSM_MINOR_TUP_EXTRA_WORDS;
-    }
-    if(ptr != lim) {
-      panic("Minor heap headers may be corrupted");
-    }
-  }
-  { // Check traverse major heap
-    ssmV m;
-    for(m = 0; m < SSM_MAJOR_LIST_KINDS; m++) {
-      ssmT lst = mem->major_list[m];
-      for(; lst != NULL; lst = ssmTNext(lst)) {
-        checkMemTupInvariants(lst);
-      }
-    }
-  }
-  { // Check traverse stack
-    ssmV i;
-    for(i = mem->stack->top; i < mem->stack->size; i++) {
-      ssmV e = mem->stack->vals[i];
-      if(e > 0x200000000ULL) {
-        panicf("Invalid value in stack[%zu/%zu]: %zu = 0x%zx\n", i, mem->stack->size, e, e);
-      }
-    }
-  }
 }

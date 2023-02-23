@@ -229,6 +229,4 @@ ssmT ssmNewTup(ssmMem *mem, ssmV tag, ssmV words);
 
 void ssmGCWriteBarrier(ssmMem *mem, ssmT tup);
 
-void ssmCheckMemInvariants(ssmMem* mem);
-
 #endif
