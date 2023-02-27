@@ -31,6 +31,7 @@
 ; -- MAGIC
 NOP ; do nothing
 MAGIC instr:u32
+FFI instr:u32
 
 ; -- STACK
 POP n:u16 ; pop n elements from stack
@@ -43,7 +44,48 @@ PUSHFN fn:o32 ; push function pointer
 
 PUSHGLOBAL idx:u32 ; push global variable
 
+; -- TUPLE
 
-; LITERAL MARKER
+PUSHTAG idx:u16 ; push a tag at [idx]
+PUSHLEN idx:u16 ; push a length at [idx]
+PUSHELEM idx:u16 jdx:u16 ; push an element at [idx] at [jdx]
+
+; -- CALL
+APP argc:u16 ; call function at [bp]
+TAIL argc:u16 ; tail call function at [bp]
+RET ; return from function
+
+; -- ARITHMETIC
+ADD ; add two elements on top of stack
+SUB ; subtract two elements on top of stack
+MUL ; multiply two elements on top of stack
+DIV ; divide two elements on top of stack
+MOD ; modulo two elements on top of stack
+
+; -- COMPARISON
+EQ ; compare two elements on top of stack
+NE ; compare two elements on top of stack
+LT ; compare two elements on top of stack
+LE ; compare two elements on top of stack
+GT ; compare two elements on top of stack
+GE ; compare two elements on top of stack
+
+; -- LOGIC
+
+AND ; logical and two elements on top of stack
+OR ; logical or two elements on top of stack
+NOT ; logical not two elements on top of stack
+
+
+; -- BRANCH
+
+JMP o:o32 ; jump to offset
+BEQ o:o32 ; branch if equal
+BNE o:o32 ; branch if not equal
+BLT o:o32 ; branch if less than
+
+JMPTBL n:u16 ; jump to offset in table
+
+; -- LITERAL MARKER
 FN argc:u16
 LONG len:u32 bytes:b0
