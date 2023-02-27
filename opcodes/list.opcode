@@ -1,0 +1,49 @@
+; Opcode List for SSM
+; This is a comment line
+
+; Register
+; ip: instruction pointer
+; sp: stack pointer
+; bp: base pointer
+; ap: application pointer
+;
+; Note:
+; - [sp .. bp - 1] is stack frame
+; - [bp] is a function
+; - [bp + 1 .. ap - 1] is a function's arguments
+; 
+
+; Types:
+; ixx - signed int (e.g. i16 = 16-bit signed int)
+; uxx - unsigned int (e.g. u16 = 16-bit unsigned int)
+; fxx - float (e.g. f32 = 32-bit float)
+; oxx - offset of instruction (e.g. o16 = 16-bit offset)
+;       In assembly it takes the form of a label
+; b0  - Sequence of bytes
+;       In assembly it takes the form of string
+
+; Format
+; OP arg1:type arg2:type ...
+; OP: [A-Z]+
+; argx: [a-z_]+
+; type: [a-z][0-9]+
+
+; -- MAGIC
+NOP ; do nothing
+MAGIC instr:u32
+
+; -- STACK
+POP n:u16 ; pop n elements from stack
+
+PUSH idx:u16 ; push [sp + idx]
+PUSHI val:i32 ; push signed int
+PUSHU val:u32 ; push unsigned int
+PUSHF val:f32 ; push float
+PUSHFN fn:o32 ; push function pointer
+
+PUSHGLOBAL idx:u32 ; push global variable
+
+
+; LITERAL MARKER
+FN argc:u16
+LONG len:u32 bytes:b0
