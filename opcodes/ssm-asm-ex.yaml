@@ -1,0 +1,4 @@
+# SSM assembly yaml file example
+- NOP
+- PUSH: 32
+- TUP: [3, 2]

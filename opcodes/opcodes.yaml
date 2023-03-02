@@ -19,7 +19,7 @@
 # fxx - float (e.g. f32 = 32-bit float)
 # oxx - offset of instruction (e.g. o16 = 16-bit offset)
 #       In assembly it takes the form of a label
-# b0  - Sequence of bytes
+# bxx - Sequence of bytes
 #       In assembly it takes the form of string
 
 # Format
@@ -28,7 +28,6 @@
 # argx: [a-z_]+
 # type: [a-z][0-9]+
 
-opcodes:
 # -- MAGIC
 - NOP: [] # do nothing
 - MAGIC:
@@ -106,4 +105,4 @@ opcodes:
   - arc: u16
 - LONG: # long tuples
   - len: u32
-  - bytes: b0
+  - bytes: b32
