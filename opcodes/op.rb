@@ -139,6 +139,41 @@ module SSM
     end
   end
 
+  class JumpTable < ArgType
+    attr_reader :lenBytes, :lenBits, :lenFormat, :ruby_class
+    
+    def initialize lenBytes, offBytes
+      @lenBytes = lenBytes
+      @lenBits = lenBytes * 8
+      @lenFormat = UnsignedInt.formats[@lenBits]
+      raise "Invalid length bits #{@lenBits} for jump table" if @lenFormat == nil
+      @offBytes = offBytes
+      @offBits = offBytes * 8
+      @offFormat = SignedInt.formats[@offBits]
+      raise "Invalid offset bits #{@offBits} for jump table" if @offFormat == nil
+      @ruby_class = Array
+    end
+
+    def to_s
+      "j#{@lenBits}_#{@offBits}"
+    end
+
+    def bytes str
+      @lenBytes + str.unpack(@lenFormat)[0] * @offBytes
+    end
+
+    def pack value
+      len = value.length
+      lenStr = [len].pack(@lenFormat)
+      lenStr + value.map{|v| [v].pack(@offFormat)}.join
+    end
+
+    def unpack str
+      len = str.unpack(@lenFormat)[0]
+      return str[@lenBytes, len].unpack(@offFormat * len)
+    end
+  end
+
   @@i8 = SignedInt.new(1)
   @@i16 = SignedInt.new(2)
   @@i32 = SignedInt.new(4)
@@ -152,6 +187,7 @@ module SSM
   @@b32 = Bytes.new(4)
   @@o16 = Offset.new(2)
   @@o32 = Offset.new(4)
+  @@j16_32 = JumpTable.new(2, 4)
 
   @@arg_types = [
     # Signed integers
@@ -164,6 +200,8 @@ module SSM
     @@b32,
     # Offsets
     @@o16, @@o32,
+    # Jump tables
+    @@j16_32,
   ]
 
   @@arg_type_map = {}
@@ -236,12 +274,21 @@ module SSM
   # Opcode Table
 
   class OpTable
-    def initialize ops
+    attr_reader :array, :map, :magic_array, :magic_map
+
+    def initialize ops, magics
+      # Set ops
       @array = []
       @map = {}
       ops.each_with_index do |op, i|
         @array << op
         @map[op.name] = op
+      end
+      # Set magics
+      @magic_array = magics
+      @magic_map = {}
+      magics.each_with_index do |magic, i|
+        @magic_map[magic] = i
       end
     end
 
@@ -284,7 +331,8 @@ module SSM
     require 'yaml'
     yaml = YAML.load_file filename
     opcodes = []
-    yaml.each do |pair|
+    magics = []
+    yaml['opcodes'].each do |pair|
       pair.each do |op_name, args|
         if args.is_a? Array
           args = args.map do |a|
@@ -306,6 +354,9 @@ module SSM
         opcodes << op
       end
     end
-    OpTable.new opcodes
+    yaml['magics'].each do |name|
+      magics << name
+    end
+    OpTable.new opcodes, magics
   end
 end
