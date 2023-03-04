@@ -104,5 +104,4 @@
 - FN: # function
   - arc: u16
 - LONG: # long tuples
-  - len: u32
   - bytes: b32

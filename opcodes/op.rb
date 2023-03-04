@@ -29,12 +29,13 @@ module SSM
     }
     def self.formats; @@formats; end
 
-    attr_reader :bits, :bytes, :format
+    attr_reader :bits, :bytes, :format, :ruby_class
 
     def initialize bytes
       @bytes = bytes
       @bits = bytes * 8
       @format = @@formats[@bits]
+      @ruby_class = 0.class
       raise "Invalid bits #{bits} for signed int" unless @format
     end
 
@@ -56,12 +57,13 @@ module SSM
     }
     def self.formats; @@formats; end
 
-    attr_reader :bits, :bytes, :format
+    attr_reader :bits, :bytes, :format, :ruby_class
 
     def initialize bytes
       @bytes = bytes
       @bits = bytes * 8
       @format = @@formats[@bits]
+      @ruby_class = 0.class
       raise "Invalid bits #{@bits} for unsigned int" unless @format
     end
 
@@ -81,12 +83,13 @@ module SSM
     }
     def self.formats; @@formats; end
 
-    attr_reader :bits, :bytes, :format
+    attr_reader :bits, :bytes, :format, :ruby_class
 
     def initialize bytes
       @bytes = bytes
       @bits = bytes * 8
       @format = @@formats[@bits]
+      @ruby_class = (0.0).class
       raise "Invalid bits #{@bits} for float" unless @format
     end
 
@@ -100,12 +103,13 @@ module SSM
   end
 
   class Bytes < ArgType
-    attr_reader :lenBytes, :lenBits, :lenFormat
+    attr_reader :lenBytes, :lenBits, :lenFormat, :ruby_class
 
     def initialize lenBytes
       @lenBytes = lenBytes
       @lenBits = lenBytes * 8
       @lenFormat = UnsignedInt.formats[@lenBits]
+      @ruby_class = String
       raise "Invalid length bits #{@lenBits} for bytes" if @lenFormat == nil
     end
 
@@ -204,18 +208,28 @@ module SSM
     def initialize op, args
       @op = op
       @args = args
+      @args = [] if @args == nil
+      # Check types
+      if @op.args.length != @args.length
+        raise "Invalid number of arguments for #{op.name}"
+      end
+      @op.args.each_with_index do |arg, i|
+        unless @args[i].is_a? arg.type.ruby_class
+          raise "The argument #{arg.name} must be a #{arg.type.ruby_class}"
+        end
+      end
     end
 
     def to_bytes
-      result = [op.byte].pack("C")
-      args.each do |arg|
-        result += arg.type.pack(arg.value)
+      result = [@op.byte].pack("C")
+      @op.args.each_with_index do |arg, i|
+        result += arg.type.pack @args[i]
       end
       result
     end
 
     def to_s
-      "#{op.name} #{args.map(&:to_s).join(' ')}"
+      "#{@op.name} #{@args.map(&:to_s).join(' ')}"
     end
   end
 

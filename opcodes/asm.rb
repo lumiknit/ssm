@@ -18,17 +18,56 @@ end
 
 # Read file
 require 'yaml'
+
+def parseArgs value
+  if value.is_a? Integer
+    return [value]
+  elsif value.is_a? Float
+    return [value]
+  elsif value.is_a? String
+    return [value]
+  elsif value.is_a? Array
+    arr = []
+    value.each do |v|
+      arr += parseArgs v
+    end
+    return arr
+  else
+    puts "Error: Invalid file format"
+    exit
+  end
+end
+
 contents = YAML::load_file filename
 lines = []
 contents.each_with_index do |line, index|
   if line.is_a? String
-    lines << SSM::Line.new(line, index)
+    op = opcodes[line.upcase]
+    if op == nil
+      puts "Error: Invalid opcode #{line} at line #{index}"
+      exit
+    end
+    lines << SSM::Line.new(op, [])
+  elsif line.is_a? Hash
+    line.each do |key, value|
+      op = opcodes[key]
+      if op == nil
+        puts "Error: Invalid opcode #{key} at line #{index}"
+        exit
+      end
+      args = parseArgs value
+      lines << SSM::Line.new(op, args)
+    end
   else
-
-  unless line.is_a? Array or line.length != 1
-    raise "#{filename}:#{line}: Each line must be an array of length 1"
-  end
-  line.each do |op, args|
-    puts "#{op} #{args}"
+    puts "Error: Invalid file format"
+    exit
   end
 end
+
+bytes = "".b
+
+for line in lines
+  bytes += line.to_bytes
+end
+
+File.binwrite "#{filename}.ssm", bytes
