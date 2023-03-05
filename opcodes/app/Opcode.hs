@@ -1,49 +1,33 @@
-# Opcode List for SSM
-# This is a comment line
+module Opcode where
 
-# Register
-# ip: instruction pointer
-# sp: stack pointer
-# bp: base pointer
-# ap: application pointer
-#
-# Note:
-# - [sp .. bp - 1] is stack frame
-# - [bp] is a function
-# - [bp + 1 .. ap - 1] is a function's arguments
-# 
+import Data.List
 
-# Types:
-# - All types are litte-endian
-# - xx is the number of bits
-# ixx - signed int (e.g. i16 = 16-bit signed int)
-# uxx - unsigned int (e.g. u16 = 16-bit unsigned int)
-# fxx - float (e.g. f32 = 32-bit float)
-# bxx - Sequence of bytes
-#       In assembly it takes the form of string
-#       First xx bits for length of string, and the rest bytes for data
-#       e.g. b16 "Hello" = (len) 0x05 0x00 (data) 0x48 0x65 0x6c 0x6c 0x6f
-# mxx - magic (e.g. m16 = 16-bit magic)
-# oxx - offset of instruction (e.g. o16 = 16-bit offset)
-#       In assembly it takes the form of a label
-# jxx_yy - jump table with xx bits length & yy bits offset
+data ArgType =
+    ATI Int -- Signed int (bits)
+  | ATU Int -- Unsigned int (bits)
+  | ATF Int -- Float (bits)
+  | ATB Int -- Bytes (bits of length)
+  | ATM Int -- Magic (bits of instr)
+  | ATO Int -- Opcode (bits of offset)
+  | ATJ Int -- Jump table (bits of offset)
 
-# Currently allowed types:
-# - i8, i16, i32, i64
-# - u8, u16, u32, u64
-# - f32, f64
-# - b32
-# - m16
-# - o16, o32
-# - j16_32
+i8 = ATI 8
+i16 = ATI 16
+i32 = ATI 32
+u8 = ATU 8
+u16 = ATU 16
+u32 = ATU 32
+f32 = ATF 32
+f64 = ATF 64
+b16 = ATB 16
+b32 = ATB 32
+m16 = ATM 16
+o32 = ATO 32
+j32 = ATJ 32
 
-# Format
-# OP arg1:type arg2:type ...
-# OP: [A-Z]+
-# argx: [a-z_]+
-# type: [a-z][0-9]+
+type Opcode = (String, [ArgType])
 
-opcodes:
+{-
 # -- NO OP
 - NOP: [] # do nothing
 
@@ -182,92 +166,13 @@ opcodes:
 - XFN: # function
   - argc: u16
   - stackreq: u32
+-}
 
-# ---
-
-# Magic instructions
-# Magic instruction is a kind of extension to perform special tasks,
-# such as FFI, I/O, OS Features, etc.
-
-magics:
-
-# -- NO OP
-- NOP
-
-# -- VM
-- NEWVM # create a new VM
-- NEWPROCESS # create a new vm process
-- VMSELF # push current VM
-- VMPARENT # push parent VM
-- EVAL # evaluate a bytecode long tuple in vm
-- HALTED # check if vm is halted
-- SENDMSG # send a message to a vm
-- RECVMSG # receive a message from a vm
-
-# -- FILES
-- FOPEN # fopen
-- FCLOSE # fclose
-- FFLUSH # fflush
-- FREAD # fread
-- FWRITE # fwrite
-- FTELL # ftell
-- FSEEK # fseek
-- FEOF # feof
-- STDREAD # read from stdin
-- STDWRITE # write to stdout
-- STDERROR # write to stderr
-- REMOVE # remove file
-- RENAME # rename file
-- TMPFILE # get a temporary file
-- READFILE # read a file into a long tuple
-- WRITEFILE # write a long tuple into a file
-
-# -- C STDLIB
-- MALLOC # malloc
-- FREE # free
-- SRAND # srand
-- RAND # rand
-- ARG # get command line argument
-- ENV # get environment variable
-- EXIT # exit
-- SYSTEM # system
-
-# -- MATH
-- PI
-- E
-- ABS
-- SIN
-- COS
-- TAN
-- ASIN
-- ACOS
-- ATAN
-- ATAN2
-- EXP
-- LOG
-- LOG10
-- LN
-- MODF
-- POW
-- SQRT
-- CEIL
-- FLOOR
-- FABS
-- FMOD
-
-# -- TIME
-- CLOCK # get current clock
-- TIME # get current time
-
-# -- OS-SPECIFIC FEATURES
-- CWD
-- ISDIR
-- ISFILE
-- MKDIR
-- RMDIR
-- CHDIR
-- FILES
-
-# -- FFI
-- FFILOAD
-
+opcodes :: [Opcode]
+opcodes = [
+  ("NOP", []),
+  ("HEADER", [u32, u32, u32]),
+  ("HALT", []),
+  ("POP", [u16]),
+  ("")
+]

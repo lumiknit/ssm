@@ -18,6 +18,17 @@ module SSM
     def unpack str
       str.unpack @format + "a*"
     end
+
+    def ruby_value_to_packable value
+      if value.is_a? @ruby_class
+        raise "The type of value #{value} must be #{self}" unless value.is_a? @ruby_class
+      end
+      return value
+    end
+
+    def pack_ruby_value value
+      pack ruby_value_to_packable(value)
+    end
   end
 
   class SignedInt < ArgType
@@ -136,6 +147,29 @@ module SSM
   class Offset < SignedInt
     def to_s
       "o#{@bits}"
+    end
+  end
+
+  class Magic < UnsignedInt
+    def initialize bytes, magic_map
+      super bytes
+      @magic_map = magic_map
+      @ruby_class = String
+    end
+
+    def to_s
+      "m#{@bits}"
+    end
+
+    def ruby_value_to_packable value
+      unless value.is_a? @ruby_class
+        raise "The type of value #{value} must be #{self}" unless @magics.include? value
+      end
+      v = @magic_map[value]
+      if v == nil
+        raise "Invalid magic value #{value}"
+      end
+      v
     end
   end
 
@@ -261,7 +295,7 @@ module SSM
     def to_bytes
       result = [@op.byte].pack("C")
       @op.args.each_with_index do |arg, i|
-        result += arg.type.pack @args[i]
+        result += arg.type.pack_ruby_value @args[i]
       end
       result
     end
@@ -330,8 +364,17 @@ module SSM
   def self.read_opcodes_yaml filename
     require 'yaml'
     yaml = YAML.load_file filename
-    opcodes = []
+    # Read magics
     magics = []
+    magic_map = {}
+    if yaml['magics']
+      yaml['magics'].each do |name|
+        magic_map[name] = magics.length
+        magics << name
+      end
+    end
+    # Read opcodes
+    opcodes = []
     yaml['opcodes'].each do |pair|
       pair.each do |op_name, args|
         if args.is_a? Array
@@ -339,7 +382,11 @@ module SSM
             arg = nil
             a.each do |name, type|
               begin
-                argType = @@arg_type_map[type]
+                if type == 'm16'
+                  argType = Magic.new 2, magic_map
+                else
+                  argType = @@arg_type_map[type]
+                end
                 arg = Arg.new name, argType
               rescue
                 raise "Invalid argument type #{type} for #{name} in #{op_name}"
@@ -354,9 +401,7 @@ module SSM
         opcodes << op
       end
     end
-    yaml['magics'].each do |name|
-      magics << name
-    end
+    # Generated
     OpTable.new opcodes, magics
   end
 end
