@@ -1,6 +1,7 @@
 module Main where
 
 import Magic
+import Arg
 
 -- Read the opcodes file
 readOpcodes :: IO String
