@@ -1,29 +1,6 @@
-module Opcode where
+module Main where
 
 import Data.List
-
-data ArgType =
-    ATI Int -- Signed int (bits)
-  | ATU Int -- Unsigned int (bits)
-  | ATF Int -- Float (bits)
-  | ATB Int -- Bytes (bits of length)
-  | ATM Int -- Magic (bits of instr)
-  | ATO Int -- Opcode (bits of offset)
-  | ATJ Int -- Jump table (bits of offset)
-
-i8 = ATI 8
-i16 = ATI 16
-i32 = ATI 32
-u8 = ATU 8
-u16 = ATU 16
-u32 = ATU 32
-f32 = ATF 32
-f64 = ATF 64
-b16 = ATB 16
-b32 = ATB 32
-m16 = ATM 16
-o32 = ATO 32
-j32 = ATJ 32
 
 type Opcode = (String, [ArgType])
 
@@ -173,6 +150,5 @@ opcodes = [
   ("NOP", []),
   ("HEADER", [u32, u32, u32]),
   ("HALT", []),
-  ("POP", [u16]),
-  ("")
+  ("POP", [u16])
 ]

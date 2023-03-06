@@ -22,6 +22,7 @@ executable opcodes
     -- other-extensions:
     build-depends:    base ^>=4.17.0.0,
                       bytestring ^>= 0.11.0.0,
+                      binary ^>= 0.8.0.0,
                       parsec ^>= 3.1.0.0
     hs-source-dirs:   app
     default-language: Haskell2010

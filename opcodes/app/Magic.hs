@@ -1,5 +1,6 @@
 module Magic where
 
+import qualified Data.ByteString as B
 import Data.List
 
 magics :: [String]
