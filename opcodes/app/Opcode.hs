@@ -1,10 +1,16 @@
-module Main where
+module Opcode where
 
 import Data.List
-import Arg
-import Magic
 
-type Opcode = (String, [ArgType])
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as BL
+import qualified Data.Binary.Get as BG
+import qualified Data.Binary.Put as BP
+
+import Arg
+import qualified Magic
+
+type Opcode = (String, [Arg.Type])
 
 opcodes :: [Opcode]
 opcodes = [
@@ -83,9 +89,38 @@ opcodes = [
   ("BEQ", [o32]),
   ("BNE", [o32]),
   ("BTAG", [u16, o32]),
-  ("JTAG", [j16_32]),
+  ("JTAG", [j32]),
   -- Magic
   ("MAGIC", [m16]),
   -- Literal Marker
-  ("XFN", [u16, u32])
-]
+  ("XFN", [u16, u32]) ]
+
+opcode :: Int -> Maybe Opcode
+opcode i
+  | i < length opcodes = Just $ opcodes !! i
+  | otherwise = Nothing
+
+opcodeIndex :: String -> Maybe Int
+opcodeIndex s = elemIndex s $ map fst opcodes
+
+showOpcode :: Int -> String
+showOpcode i = case opcode i of
+  Just (name, args) -> name ++ " " ++ unwords (map show args)
+  Nothing -> "Unknown opcode"
+
+runUnpack :: BG.Get a -> B.ByteString -> Either String (a, B.ByteString)
+runUnpack g b = case BG.runGetOrFail g (BL.fromStrict b) of
+  Left (_, offset, err) -> Left msg
+    where msg = "Error[" ++ show offset ++ "]: " ++ err
+  Right (left, _offset, val) -> Right (val, B.toStrict left)
+
+getOpcode = do
+  i <- BG.getWord8
+  case opcode $ fromIntegral i of
+    Just (name, args) -> do
+      args <- mapM getArg args
+      return (name, args)
+    Nothing -> fail $ "Unknown opcode: " ++ show i
+
+unpackOpcode :: B.ByteString -> Either String ByteString
+unpackOpcode 

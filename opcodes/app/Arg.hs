@@ -4,14 +4,13 @@ import Control.Monad
 
 import Data.Int (Int32)
 import Data.Word (Word32)
+
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Binary.Get as BG
 import qualified Data.Binary.Put as BP
 
 import qualified Magic
-
-
 
 data Type =
     TInt Int -- Signed int (bits)
