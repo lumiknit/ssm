@@ -63,7 +63,7 @@ instance Show Val where
   show (VOffset i) = show i
   show (VJmptbl is) = show is
 
-runUnpack :: BG.Get Val -> B.ByteString -> Either String (Val, B.ByteString)
+runUnpack :: BG.Get a -> B.ByteString -> Either String (a, B.ByteString)
 runUnpack g b = case BG.runGetOrFail g (BL.fromStrict b) of
   Left (_, offset, err) -> Left msg
     where msg = "Error[" ++ show offset ++ "]: " ++ err

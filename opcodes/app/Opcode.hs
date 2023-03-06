@@ -108,19 +108,15 @@ showOpcode i = case opcode i of
   Just (name, args) -> name ++ " " ++ unwords (map show args)
   Nothing -> "Unknown opcode"
 
-runUnpack :: BG.Get a -> B.ByteString -> Either String (a, B.ByteString)
-runUnpack g b = case BG.runGetOrFail g (BL.fromStrict b) of
-  Left (_, offset, err) -> Left msg
-    where msg = "Error[" ++ show offset ++ "]: " ++ err
-  Right (left, _offset, val) -> Right (val, B.toStrict left)
 
+getOpcode :: BG.Get Opcode
 getOpcode = do
   i <- BG.getWord8
   case opcode $ fromIntegral i of
     Just (name, args) -> do
-      args <- mapM getArg args
+      args <- mapM getByType args
       return (name, args)
     Nothing -> fail $ "Unknown opcode: " ++ show i
 
-unpackOpcode :: B.ByteString -> Either String ByteString
-unpackOpcode 
+unpackOpcode :: B.ByteString -> Either String (Opcode, B.ByteString)
+unpackOpcode = runUnpack getOpcode
