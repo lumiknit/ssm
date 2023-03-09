@@ -1,5 +1,6 @@
 module Opcode where
 
+import Control.Monad
 import Data.List
 
 import qualified Data.ByteString as B
@@ -10,10 +11,10 @@ import qualified Data.Binary.Put as BP
 import Arg
 import qualified Magic
 
-type Opcode = (String, [Arg.Type])
+type OpSpec = (String, [Arg.Type])
 
-opcodes :: [Opcode]
-opcodes = [
+opSpecs :: [OpSpec]
+opSpecs = [
   -- No op
   ("NOP", []),
   -- Header
@@ -95,28 +96,58 @@ opcodes = [
   -- Literal Marker
   ("XFN", [u16, u32]) ]
 
-opcode :: Int -> Maybe Opcode
-opcode i
-  | i < length opcodes = Just $ opcodes !! i
+opSpec :: Int -> Maybe OpSpec
+opSpec i
+  | i < length opSpecs = Just $ opSpecs !! i
   | otherwise = Nothing
 
-opcodeIndex :: String -> Maybe Int
-opcodeIndex s = elemIndex s $ map fst opcodes
+opSpecIndex :: String -> Maybe Int
+opSpecIndex s = elemIndex s $ map fst opSpecs
 
-showOpcode :: Int -> String
-showOpcode i = case opcode i of
-  Just (name, args) -> name ++ " " ++ unwords (map show args)
+showOpSpec :: Int -> String
+showOpSpec i = case opSpec i of
   Nothing -> "Unknown opcode"
+  Just (name, argTypes) -> name ++ " " ++ unwords (map show argTypes)
 
+data OpCode = OpCode Int [Val]
+  deriving (Eq)
 
-getOpcode :: BG.Get Opcode
+instance Show OpCode where
+  show (OpCode i args) = opName ++ " " ++ unwords (map show args)
+    where opName = case opSpec i of
+            Nothing -> "Unknown"
+            Just (name, _) -> name
+
+getOpcode :: BG.Get OpCode
 getOpcode = do
   i <- BG.getWord8
-  case opcode $ fromIntegral i of
+  let i = fromIntegral i
+  case opSpec i of
+    Nothing -> fail $ "Unknown opcode: " ++ show i
     Just (name, args) -> do
       args <- mapM getByType args
-      return (name, args)
-    Nothing -> fail $ "Unknown opcode: " ++ show i
+      return $ OpCode i args
 
-unpackOpcode :: B.ByteString -> Either String (Opcode, B.ByteString)
+unpackOpcode :: B.ByteString -> Either String (OpCode, B.ByteString)
 unpackOpcode = runUnpack getOpcode
+
+putOpcode :: OpCode -> Either String BP.Put
+putOpcode (OpCode i args) = do
+  case opSpec i of
+    Nothing -> Left $ "Unknown opcode: " ++ show i
+    Just (name, argTypes) ->
+      case f (zip argTypes args) (Right []) of
+        Left e -> Left e
+        Right v -> Right $ do
+          BP.putWord8 $ fromIntegral i
+          sequence_ v
+      where f [] v = v
+            f _ (Left v) = Left v
+            f ((ty, a) : xs) (Right v) = case putByType ty a of
+              Right p -> Right $ p : v
+              Left e -> Left e
+
+packOpcode :: OpCode -> Either String B.ByteString
+packOpcode code = case putOpcode code of
+  Left e -> Left e
+  Right p -> Right $ B.toStrict $ BP.runPut p
