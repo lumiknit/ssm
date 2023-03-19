@@ -113,7 +113,7 @@ pub const MAGIC: &'static [&str] = &[
 
 // Opcodes
 
-pub static OPCODES: &'static [(&str, &'static [&'static ArgType])] = &[
+pub static OPCODES: &'static [(&str, &[&ArgType])] = &[
   ("NOP", &[]),
   // Header
   ("HEADER", &[U32, U32, U32]),

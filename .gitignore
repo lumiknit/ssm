@@ -1,6 +1,6 @@
 .vscode
-/target
-/rust/target
+target
+rust/target
 *.o
 *.a
 *.so
