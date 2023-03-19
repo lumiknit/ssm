@@ -22,24 +22,22 @@ pub enum ArgVal {
 }
 
 
-
-
 // --- Opcode & type listing
 
 // Types
 
-pub static I8: &'static ArgType = &ArgType::Int(8);
-pub static I16: &'static ArgType = &ArgType::Int(16);
-pub static I32: &'static ArgType = &ArgType::Int(32);
-pub static U8: &'static ArgType = &ArgType::Uint(8);
-pub static U16: &'static ArgType = &ArgType::Uint(16);
-pub static U32: &'static ArgType = &ArgType::Uint(32);
-pub static F32: &'static ArgType = &ArgType::Float(32);
-pub static B16: &'static ArgType = &ArgType::Bytes(16);
-pub static B32: &'static ArgType = &ArgType::Bytes(32);
-pub static M16: &'static ArgType = &ArgType::Magic(16);
-pub static O32: &'static ArgType = &ArgType::Offset(32);
-pub static J32: &'static ArgType = &ArgType::Jmptbl(32);
+pub static I8: &'static ArgType = &ArgType::Int(1);
+pub static I16: &'static ArgType = &ArgType::Int(2);
+pub static I32: &'static ArgType = &ArgType::Int(4);
+pub static U8: &'static ArgType = &ArgType::Uint(1);
+pub static U16: &'static ArgType = &ArgType::Uint(2);
+pub static U32: &'static ArgType = &ArgType::Uint(4);
+pub static F32: &'static ArgType = &ArgType::Float(4);
+pub static B16: &'static ArgType = &ArgType::Bytes(2);
+pub static B32: &'static ArgType = &ArgType::Bytes(4);
+pub static M16: &'static ArgType = &ArgType::Magic(2);
+pub static O32: &'static ArgType = &ArgType::Offset(4);
+pub static J32: &'static ArgType = &ArgType::Jmptbl(4);
 
 // Magics
 
