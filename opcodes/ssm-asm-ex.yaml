@@ -1,3 +1,0 @@
-# SSM assembly yaml file example
-- LONG: "Hello, \0World!\0"
-- MAGIC: NOP
