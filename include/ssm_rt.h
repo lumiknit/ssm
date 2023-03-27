@@ -17,6 +17,80 @@
 #include <string.h>
 
 
+// Endianess
+#if defined(__BYTE_ORDER) && __BYTE_ORDER == __BIG_ENDIAN || \
+    defined(__BIG_ENDIAN__) || \
+    defined(__ARMEB__) || \
+    defined(__THUMBEB__) || \
+    defined(__AARCH64EB__) || \
+    defined(_MIBSEB) || defined(__MIBSEB) || defined(__MIBSEB__)
+  #define SSM_BIG_ENDIAN
+#elif defined(__BYTE_ORDER) && __BYTE_ORDER == __LITTLE_ENDIAN || \
+    defined(__LITTLE_ENDIAN__) || \
+    defined(__ARMEL__) || \
+    defined(__THUMBEL__) || \
+    defined(__AARCH64EL__) || \
+    defined(_MIPSEL) || defined(__MIPSEL) || defined(__MIPSEL__)
+  #define SSM_LITTLE_ENDIAN
+#else
+  #error "Cannot determine endianess"
+#endif
+
+#define SSM_READ_U8(p) (*(uint8_t*)(p))
+#define SSM_READ_I8(p) (*(int8_t*)(p))
+
+#ifdef SSM_BIG_ENDIAN
+
+inline static uint16_t ssmReadU16(const uint8_t *p) {
+  register union {
+    uint8_t b[2];
+    uint16_t u;
+  } u = {{p[1], p[0]}};
+  return u.u;
+}
+
+inline static uint16_t ssmReadU32(const uint8_t *p) {
+  register union {
+    uint8_t b[4];
+    uint32_t u;
+  } u = {{p[3], p[2], p[1], p[0]}};
+  return u.u;
+}
+
+inline static int16_t ssmReadI16(const uint8_t *p) {
+  register union {
+    uint8_t b[2];
+    int16_t u;
+  } u = {{p[1], p[0]}};
+  return u.u;
+}
+
+inline static int32_t ssmReadI32(const uint8_t *p) {
+  register union {
+    uint8_t b[4];
+    int32_t u;
+  } u = {{p[3], p[2], p[1], p[0]}};
+  return u.u;
+}
+
+inline static float ssmReadI32(const uint8_t *p) {
+  register union {
+    uint8_t b[4];
+    float u;
+  } u = {{p[3], p[2], p[1], p[0]}};
+  return u.u;
+}
+
+#else
+
+#define SSM_READ_U16(p) (*(uint16_t*)p)
+#define SSM_READ_U32(p) (*(uint32_t*)p)
+#define SSM_READ_I16(p) (*(int16_t*)p)
+#define SSM_READ_I32(p) (*(int32_t*)p)
+#define SSM_READ_F32(p) (*(float*)p)
+
+#endif
+
 // Pointer-size values
 
 typedef intptr_t ssmIptr;

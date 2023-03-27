@@ -32,6 +32,18 @@ fn clone_bytes<const L: usize>(a: &[u8]) -> Option<[u8; L]> {
 }
 
 impl ArgType {
+  pub fn size(&self) -> usize {
+    match self {
+      &ArgType::Int(size) => size as usize,
+      &ArgType::Uint(size) => size as usize,
+      &ArgType::Float(size) => size as usize,
+      &ArgType::Bytes(size) => size as usize,
+      &ArgType::Magic(size) => size as usize,
+      &ArgType::Offset(size) => size as usize,
+      &ArgType::Jmptbl(size) => size as usize,
+    }
+  }
+
   pub fn unpack(&self, bytes: &[u8]) -> Option<(usize, ArgVal)> {
     match self {
       &ArgType::Int(size) =>
@@ -106,8 +118,62 @@ impl ArgType {
     }
   }
 
-  pub fn pack(&self, val: &ArgVal) -> Vec<u8> {
-
+  pub fn pack(&self, val: &ArgVal) -> Option<Vec<u8>> {
+    match (self, val) {
+      (&ArgType::Int(size), &ArgVal::Int(v)) =>
+        match size {
+          1 => Some(vec![v as i8 as u8]),
+          2 => Some(i16::to_le_bytes(v as i16).to_vec()),
+          4 => Some(i32::to_le_bytes(v).to_vec()),
+          _ => None
+        },
+      (&ArgType::Uint(size), &ArgVal::Uint(v)) =>
+        match size {
+          1 => Some(vec![v as u8]),
+          2 => Some(u16::to_le_bytes(v as u16).to_vec()),
+          4 => Some(u32::to_le_bytes(v).to_vec()),
+          _ => None
+        },
+      (&ArgType::Float(size), &ArgVal::Float(v)) =>
+        match size {
+          4 => Some(f32::to_le_bytes(v).to_vec()),
+          _ => None
+        },
+      (&ArgType::Bytes(size), &ArgVal::Bytes(ref v)) => {
+        let len = v.len();
+        let mut bytes = match size {
+          2 => u16::to_le_bytes(len as u16).to_vec(),
+          4 => u32::to_le_bytes(len as u32).to_vec(),
+          _ => return None
+        };
+        bytes.extend_from_slice(v);
+        Some(bytes)
+      },
+      (&ArgType::Magic(size), &ArgVal::Magic(v)) =>
+        match size {
+          1 => Some(vec![v as u8]),
+          2 => Some(u16::to_le_bytes(v as u16).to_vec()),
+          _ => None
+        },
+      (&ArgType::Offset(size), &ArgVal::Offset(v)) =>
+        match size {
+          2 => Some(u16::to_le_bytes(v as u16).to_vec()),
+          4 => Some(u32::to_le_bytes(v).to_vec()),
+          _ => None
+        },
+      (&ArgType::Jmptbl(size), &ArgVal::Jmptbl(ref v)) => {
+        let mut bytes = u16::to_le_bytes(v.len() as u16).to_vec();
+        for o in v {
+          match size {
+            2 => bytes.extend_from_slice(&u16::to_le_bytes(*o as u16)),
+            4 => bytes.extend_from_slice(&u32::to_le_bytes(*o)),
+            _ => return None
+          }
+        }
+        Some(bytes)
+      },
+      _ => None
+    }
   }
 }
 
@@ -213,9 +279,27 @@ pub const MAGIC: &'static [&str] = &[
   "FFILOAD",
 ];
 
+pub fn magic_name(idx: u16) -> Option<&'static str> {
+  if idx as usize >= MAGIC.len() {
+    None
+  } else {
+    Some(MAGIC[idx as usize])
+  }
+}
+
+pub fn magic_idx(name: String) -> Option<u16> {
+  for (i, m) in MAGIC.iter().enumerate() {
+    if m == &name {
+      return Some(i as u16);
+    }
+  }
+  None
+}
+
 // Opcodes
 
-pub static OPCODES: &'static [(&str, &[&ArgType])] = &[
+type Opcode<'r> = (&'r str, &'r [&'r ArgType]);
+pub static OPCODES: &'static [Opcode<'static>] = &[
   ("NOP", &[]),
   // Stack
   ("POP", &[U16]),
@@ -296,3 +380,20 @@ pub static OPCODES: &'static [(&str, &[&ArgType])] = &[
   ("HEADER", &[U32, U32, U32]),
   ("HALT", &[]),
 ];
+
+pub fn opcode(idx: u16) -> Option<Opcode<'static>> {
+  if idx as usize >= OPCODES.len() {
+    None
+  } else {
+    Some(OPCODES[idx as usize])
+  }
+}
+
+pub fn opcode_idx(name: String) -> Option<u16> {
+  for (i, o) in OPCODES.iter().enumerate() {
+    if o.0 == name {
+      return Some(i as u16);
+    }
+  }
+  None
+}

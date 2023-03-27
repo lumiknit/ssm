@@ -7,5 +7,7 @@ rust/target
 /ssm
 /ssm-test
 /OUT*
+/opcodes-rs/**.h
+/opcodes-rs/**.c
 
 dist-newstyle/
