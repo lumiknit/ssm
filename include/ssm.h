@@ -31,11 +31,14 @@ typedef struct ssmVM {
   ssmMem mem;
 
   size_t n_code;
-  ssmOp *code;
+  void *code;
 } ssmVM;
 
 void ssmInitVM(ssmVM* vm, ssmConfig* config);
 void ssmFiniVM(ssmVM* vm);
+
+int ssmLoadFile(ssmVM *vm, const char *filename);
+int ssmLoadCode(ssmVM *vm, const ssmOp *code, size_t n_code);
 
 void ssmRunVM(ssmVM* vm, ssmV entry_ip);
 

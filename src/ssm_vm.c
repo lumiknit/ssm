@@ -8,6 +8,12 @@
 #include <ssm.h>
 #include <ssm_i.h>
 
+typedef struct Code {
+  struct Code *next;
+  size_t n_code;
+  ssmOp code[1];
+} Code;
+
 void ssmLoadDefaultConfig(ssmConfig* config) {
   // 100%
   config->major_gc_threshold_percent = 100;
@@ -26,12 +32,55 @@ void ssmInitVM(ssmVM* vm, ssmConfig* config) {
     config->initial_stack_size,
     config->initial_global_size);
 
-  vm->code = calloc(1024, 1);
+  vm->code = NULL;
   vm->n_code = 1024;
 }
 
 void ssmFiniVM(ssmVM* vm) {
+  // Free all codes
+  Code *c = vm->code;
+  while(c != NULL) {
+    Code *next = c->next;
+    free(c);
+    c = next;
+  }
+
   ssmFiniMem(&vm->mem);
+}
+
+int ssmLoadFile(ssmVM *vm, const char *filename) {
+  // Read file
+  FILE *file = fopen(filename, "rb");
+  if (file == NULL) {
+    return -1;
+  }
+  fseek(file, 0, SEEK_END);
+  size_t size = ftell(file);
+  rewind(file);
+
+  // Allocate code
+  Code *c = malloc(sizeof(Code) + size);
+  c->next = vm->code;
+  c->n_code = size;
+  fread(c->code, 1, size, file);
+  vm->code = (void*) c;
+
+  // Run VM
+  ssmRunVM(vm, (ssmOp*) &c->code);
+  return 0;
+}
+
+int ssmLoadCode(ssmVM *vm, const ssmOp *code, size_t n_code) {
+  // Allocate code
+  Code *c = malloc(sizeof(Code) + n_code);
+  c->next = vm->code;
+  c->n_code = n_code;
+  memncpy(c->code, code, n_code);
+  vm->code = (void*) c;
+
+  // Run VM
+  ssmRunVM(vm, (ssmOp*) &c->code);
+  return 0;
 }
 
 #define THREADED_CODE

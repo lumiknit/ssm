@@ -8,12 +8,11 @@
 #include <ssm.h>
 #include <ssm_i.h>
 
-int main() {
+int main(int argc, char **argv) {
   ssmVM vm;
   ssmConfig config;
   ssmLoadDefaultConfig(&config);
   ssmInitVM(&vm, &config);
-  ssmRunVM(&vm, 0);
 
   unimplemented();
 
