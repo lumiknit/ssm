@@ -21,6 +21,110 @@ pub enum ArgVal {
   Jmptbl(Vec<u32>),
 }
 
+fn clone_bytes<const L: usize>(a: &[u8]) -> Option<[u8; L]> {
+  if a.len() < L {
+    None
+  } else {
+    let mut b: [u8; L] = [0; L];
+    b.clone_from_slice(a);
+    Some(b)
+  }
+}
+
+impl ArgType {
+  pub fn unpack(&self, bytes: &[u8]) -> Option<(usize, ArgVal)> {
+    match self {
+      &ArgType::Int(size) =>
+        match size {
+          1 => Some((1, ArgVal::Int(bytes[0] as i8 as i32))),
+          2 => clone_bytes(bytes)
+            .map(|b| (2, ArgVal::Int(i16::from_le_bytes(b) as i32))),
+          4 => clone_bytes(bytes)
+            .map(|b| (4, ArgVal::Int(i32::from_le_bytes(b)))),
+          _ => None
+        },
+      &ArgType::Uint(size) =>
+        match size {
+          1 => Some((1, ArgVal::Uint(bytes[0] as u32))),
+          2 => clone_bytes(bytes)
+            .map(|b| (2, ArgVal::Uint(u16::from_le_bytes(b) as u32))),
+          4 => clone_bytes(bytes)
+            .map(|b| (4, ArgVal::Uint(u32::from_le_bytes(b)))),
+          _ => None
+        },
+      &ArgType::Float(size) =>
+        match size {
+          4 => clone_bytes(bytes)
+            .map(|b| (4, ArgVal::Float(f32::from_le_bytes(b)))),
+          _ => None
+        },
+      &ArgType::Bytes(size) => {
+        let s = size as usize;
+        let len = match size {
+          2 => u16::from_le_bytes(clone_bytes(&bytes)?) as usize,
+          4 => u32::from_le_bytes(clone_bytes(&bytes)?) as usize,
+          _ => return None
+        };
+        if bytes.len() < len + s {
+          return None
+        }
+        Some((len + s, ArgVal::Bytes(bytes[len .. len + s].to_vec())))
+      },
+      &ArgType::Magic(size) =>
+        match size {
+          1 => Some((1, ArgVal::Magic(bytes[0] as u32))),
+          2 => clone_bytes(bytes)
+            .map(|b| (2, ArgVal::Magic(u16::from_le_bytes(b) as u32))),
+          _ => None
+        },
+      &ArgType::Offset(size) =>
+        match size {
+          2 => clone_bytes(bytes)
+            .map(|b| (2, ArgVal::Offset(u16::from_le_bytes(b) as u32))),
+          4 => clone_bytes(bytes)
+            .map(|b| (4, ArgVal::Offset(u32::from_le_bytes(b)))),
+          _ => None
+        },
+      &ArgType::Jmptbl(size) => {
+        let len = u16::from_le_bytes(clone_bytes(&bytes)?) as usize;
+        let tbl_size = 2 + len * size as usize;
+        if bytes.len() < tbl_size {
+          return None
+        }
+        let mut v = Vec::new();
+        for i in 0..len {
+          let offset = 2 + i * size as usize;
+          let o = match size {
+            2 => u16::from_le_bytes(clone_bytes(&bytes[offset..])?) as u32,
+            4 => u32::from_le_bytes(clone_bytes(&bytes[offset..])?),
+            _ => return None
+          };
+          v.push(o);
+        }
+        Some((tbl_size, ArgVal::Jmptbl(v)))
+      }
+    }
+  }
+
+  pub fn pack(&self, val: &ArgVal) -> Vec<u8> {
+
+  }
+}
+
+impl ArgVal {
+  pub fn check_type(&self, arg_type: &ArgType) -> bool {
+    match (self, arg_type) {
+      (&ArgVal::Int(_), &ArgType::Int(_)) => true,
+      (&ArgVal::Uint(_), &ArgType::Uint(_)) => true,
+      (&ArgVal::Float(_), &ArgType::Float(_)) => true,
+      (&ArgVal::Bytes(_), &ArgType::Bytes(_)) => true,
+      (&ArgVal::Magic(_), &ArgType::Magic(_)) => true,
+      (&ArgVal::Offset(_), &ArgType::Offset(_)) => true,
+      (&ArgVal::Jmptbl(_), &ArgType::Jmptbl(_)) => true,
+      _ => false,
+    }
+  }
+}
 
 // --- Opcode & type listing
 
@@ -113,9 +217,6 @@ pub const MAGIC: &'static [&str] = &[
 
 pub static OPCODES: &'static [(&str, &[&ArgType])] = &[
   ("NOP", &[]),
-  // Header
-  ("HEADER", &[U32, U32, U32]),
-  ("HALT", &[]),
   // Stack
   ("POP", &[U16]),
   ("PUSH", &[U16]),
@@ -190,5 +291,8 @@ pub static OPCODES: &'static [(&str, &[&ArgType])] = &[
   // Magic
   ("MAGIC", &[M16]),
   // Literal Marker
-  ("XFN", &[U16, U32])
+  ("XFN", &[U16, U32]),
+  // Header
+  ("HEADER", &[U32, U32, U32]),
+  ("HALT", &[]),
 ];
