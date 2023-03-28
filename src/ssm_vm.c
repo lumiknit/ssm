@@ -8,11 +8,61 @@
 #include <ssm.h>
 #include <ssm_i.h>
 
-typedef struct Code {
+// Code and helpers
+
+typedef struct Chunk {
   struct Code *next;
   size_t n_code;
-  ssmOp code[1];
-} Code;
+  ssmOp ops[1];
+} Chunk;
+
+static Chunk* openChunkFromFile(const char *filename) {
+  // Read file
+  FILE *file = fopen(filename, "rb");
+  if (file == NULL) {
+    return NULL;
+  }
+  fseek(file, 0, SEEK_END);
+  size_t size = ftell(file);
+  rewind(file);
+
+  // Allocate code
+  Chunk *c = malloc(sizeof(Chunk) + size);
+  c->next = NULL;
+  c->n_code = size;
+  fread(c->ops, 1, size, file);
+  return c;
+}
+
+static int verifyCode(const ssmVM *vm, const Code *c) {
+  const uint8_t OP = 0x01;
+  const uint8_t JUMP_TARGET = 0x02;
+  // TODO: Check headers and VM config
+  unimplemented();
+  // TODO: Try to allocate same size of memory
+  unimplemented();
+  // TODO: 1st loop through all instructions
+  unimplemented();
+  size_t i;
+  for(i = 0; i < c->n_code;) {
+    ssmOp op = c->ops[i];
+    // TODO: Calculate the size of opcode and operands
+    unimplemented();
+    // TODO: Mark the opcode position as OP
+    unimplemented();
+    // TODO: Mark the jump target position as JUMP_TARGET
+    unimplemented();
+  }
+  // TODO: 2nd loop
+  for(i = 0; i < c->n_code;) {
+    // TODO: Check mark
+    // If JUMP_TARGET is marked, it must be OP
+    unimplemented();
+  }
+  // DONE
+  return 0;
+}
+
 
 void ssmLoadDefaultConfig(ssmConfig* config) {
   // 100%
