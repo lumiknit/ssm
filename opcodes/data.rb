@@ -214,3 +214,11 @@ module Arg
     end
   end
 end
+
+module Op
+  # TODO: Add opcode parser
+end
+
+module Magic
+  # TODO: Add magic parser
+end
