@@ -22,19 +22,24 @@ argTypes:
   f32:
     type: float
     bytes: 4
+  o16:
+    type: offset
+    bytes: 2
   o32:
-    type: int
+    type: offset
     bytes: 4
   b32:
     type: array
     bytes: 4
-    elemType: u8
+    elemType: uint
+    elemBytes: 1
   j32:
     type: array
     bytes: 4
-    elemType: o32
+    elemType: offset
+    elemBytes: 4
   m16:
-    type: uint
+    type: magic
     bytes: 2
 
 opcodes:
