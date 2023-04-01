@@ -1,6 +1,15 @@
+#!/bin/sh
+# Install yq and run this file to convert to json
+yq 'select(document_index == 1)' $0 -o json -I 0 > "${0%.*}.json"
+exit 0
+
 ---
 
-argTypes:
+metadata:
+  name: ssm-opcodes
+  version: 0.1.0
+
+types:
   u8:
     type: uint
     bytes: 1
@@ -31,13 +40,15 @@ argTypes:
   b32:
     type: array
     bytes: 4
-    elemType: uint
-    elemBytes: 1
+    elem:
+      type: uint
+      bytes: 1
   j32:
     type: array
     bytes: 4
-    elemType: offset
-    elemBytes: 4
+    elem:
+      type: offset
+      bytes: 4
   m16:
     type: magic
     bytes: 2

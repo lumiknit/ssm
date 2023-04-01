@@ -1,0 +1,21 @@
+; This is just a comment
+
+nop
+a: push 3
+
+long "Hello, World!"
+
+;askdl 
+tes: nop
+
+; My Jump Table
+L_1: pushi 42
+L_2: nop
+L_3: pop 3
+L_4: magic stdwrite
+
+jtag L_1 L_2 L_3 L_4
+
+magic stdwrite
+
+jmp a
