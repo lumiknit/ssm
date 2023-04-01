@@ -312,20 +312,102 @@ end
 
 # --- Convert label string to offset
 
-def translate_labels lines, labels
-  
+def calculate_offset line, labels, lit_type, label_name
+  label = labels[label_name]
+  if label.nil?
+    raise "Failed to translate labels:\n#{line[:filename]}:#{line[:line]}: Unknown label #{label_name}"
+  end
+  off = label[:pos] - line[:pos]
+  begin
+    lit_type.check_val off
+  rescue => e
+    raise "Failed to translate labels:\n#{line[:filename]}:#{line[:line]}: Offset #{off} is out of range for #{lit_type}\n  #{e}"
+  end
+  off
+end
+
+def translate_line! line, labels
+  # Get opcode
+  op = line[:opcode]
+  line[:args].each.with_index do |val, idx|
+    arg = op.args[idx]
+    # If arg is offset, translate
+    if arg.type.is_a? SSM::ArrayType and arg.type.elem_type.kind == "offset"
+      val.length.times do |i|
+        val[i] = calculate_offset line, labels, arg.type.elem_type, val[i]
+      end
+    elsif arg.type.is_a? SSM::LitType and arg.type.type.kind == "offset"
+      line[:args][idx] = calculate_offset line, labels, arg.type.type, val
+    end
+  end
+end
+
+def translate_labels! lines, labels
+  new_lines = []
+  lines.each do |line|
+    translate_line! line, labels
+  end
+  new_lines
+end
+
+def lines_to_s lines
+  ls = []
+  lines.each do |line|
+    l = "#{line[:pos]}: #{line[:opcode].name}"
+    line[:args].each.with_index do |arg, idx|
+      if idx > 0
+        l += ","
+      else
+        l += " "
+      end
+      if arg.is_a? Array
+        l += "(#{arg.length})"
+        l += "[" + arg.map{|v| v.to_s}.join(",") + "]"
+      else
+        l += arg.to_s
+      end
+    end
+    ls << l
+  end
+  ls.join "\n"
+end
+
+# --- Marshal
+
+def marshal_lines lines
+  bytes = "".b
+  lines.each do |line|
+    o = line[:opcode]
+    # First, write opcode as u8
+    bytes += [o.index].pack("C")
+    # Then, add args
+    o.args.each.with_index do |arg, idx|
+      v = line[:args][idx]
+      bytes += arg.type.pack v
+    end
+  end
+  bytes
 end
 
 # --- CLI
 
 def convert_file filename
+  # Output file
+  # Trim and append .ssm
+  outname = filename.sub(/\.[^.]+$/, "") + ".ssm"
+
   # Read file
   str = File.read filename
 
   # Unmarshal
   lines = unmarshal_lines str, filename
   lines, labels = refine_lines lines
-  puts refined_to_s lines, labels
+  translate_labels! lines, labels
+  puts lines_to_s lines
+
+  # Marshal
+  bytes = marshal_lines lines
+  File.write outname, bytes
 end
 
 # Get filename
