@@ -119,12 +119,19 @@ module SSM
 
     def unpack str
       raise "Expect String for str" unless str.is_a? String
-      len_a = str.unpack "{@len_type.pack_directive}a"
-      raise "Failed to unpack array length" if len_a[0].is_nil?
+
+      # Unpack length
+      directive = "#{@len_type.pack_directive}a*"
+      len_a = str.unpack directive
+      raise "Failed to unpack array length with a directive #{directive}" if len_a[0].nil?
       len = len_a[0]
-      data_a = len_a[1].unpack "#{@elem_type.pack_directive}#{len}"
-      raise "Failed to unpack data array" if data_a[0].is_nil?
-      return data_a[0], data_a[1]
+
+      # Unpack elements
+      directive = "#{@elem_type.pack_directive}#{len}a*"
+      data_a = len_a[1].unpack directive
+      raise "Failed to unpack data array with a directive #{directive}" if data_a[0].nil?
+      
+      return data_a[0...len], data_a[len]
     end
   end
 
@@ -146,9 +153,10 @@ module SSM
 
     def unpack str
       raise "Expect String for str" unless str.is_a? String
-      directive = "#{@type.pack_directive}a"
+      # Unpack value
+      directive = "#{@type.pack_directive}a*"
       arr = str.unpack directive
-      raise "Failed to unpack value" if arr[0].is_nil?
+      raise "Failed to unpack value with format #{directive}" if arr[0].nil?
       return arr[0], arr[1]
     end
   end

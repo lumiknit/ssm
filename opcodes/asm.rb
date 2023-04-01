@@ -391,7 +391,7 @@ end
 
 # --- CLI
 
-def convert_file filename
+def assemble filename
   # Output file
   # Trim and append .ssm
   outname = filename.sub(/\.[^.]+$/, "") + ".ssm"
@@ -411,6 +411,8 @@ def convert_file filename
 end
 
 # Get filename
-filename = ARGV[0]
-raise "No filename given" if filename.nil?
-convert_file filename
+if ARGV.length != 1
+  puts "Usage: #{$0} <asm file>"
+  exit 1
+end
+assemble ARGV[0]
