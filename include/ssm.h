@@ -12,8 +12,6 @@
 
 // Bytecode
 
-typedef uint8_t ssmOp;
-
 #include <ssm_ops.h>
 
 // VM

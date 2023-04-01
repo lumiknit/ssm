@@ -316,7 +316,10 @@ module SSM
 
   def self.spec
     json_filename = ENV["SSM_SPEC_JSON"]
-    json_filename = "spec.json" if json_filename.nil?
+    if json_filename.nil?
+      script_path = File.expand_path __FILE__
+      json_filename = File.join File.dirname(script_path), "spec.json"
+    end
     Spec.new.load_from_json_file json_filename
   end
 end
