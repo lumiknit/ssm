@@ -7,7 +7,7 @@
 
 # See asm.rb comments for SSM assembly language syntax
 
-require './spec'
+require_relative 'spec'
 $spec = SSM::spec
 
 # --- Bytes unmarshal

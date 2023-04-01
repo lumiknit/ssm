@@ -22,7 +22,7 @@
 #   - Label (e.g. foo, bar, foo.bar)
 #   - JumpTable (label array) (list labels with spaces) (e.g. L_1 L_2 ...)
 
-require './spec'
+require_relative 'spec'
 $spec = SSM.spec
 
 # --- Line parser
