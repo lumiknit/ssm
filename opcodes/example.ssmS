@@ -1,0 +1,11 @@
+; This is just a comment
+
+nop
+a: push 3
+
+long "Hello, World!"
+
+;askdl 
+tes: nop
+
+magic stdwrite

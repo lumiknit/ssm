@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 # spec.rb: SSM Spec Helper Classes
 # Author: lumiknit
 
@@ -20,7 +22,7 @@ module SSM
     end
 
     def to_s
-      "#{@kind}#{@bytes}"
+      "#{@kind}#{@bytes * 8}"
     end
 
     def self.from_hash hash
@@ -47,6 +49,27 @@ module SSM
         new b, t, pack, "f#{8 * b}", "float#{8 * b}_t"
       else
         raise "Unknown type #{t} and bytes #{b}"
+      end
+    end
+
+    def check_val val
+      case @kind
+      when "int"
+        # Check class
+        raise "Expect Integer for IntRawType" unless val.is_a? Integer
+        # Check range
+        max = 2 ** (8 * @bytes - 1) - 1
+        min = -2 ** (8 * @bytes - 1)
+        raise "Value #{val} out of range #{min}..#{max}" unless min <= val && val <= max
+      when "uint"
+        # Check class
+        raise "Expect Integer for UintRawType" unless val.is_a? Integer
+        # Check range
+        max = 2 ** (8 * @bytes) - 1
+        min = 0
+        raise "Value #{val} out of range #{min}..#{max}" unless min <= val && val <= max
+      when "float"
+        raise "Expect Float for FloatRawType" unless val.is_a? Float
       end
     end
   end
@@ -138,7 +161,7 @@ module SSM
     def initialize name, type
       raise "Expect String for name" unless name.is_a? String
       raise "Expect Type for type" unless type.is_a? Type
-      @name = name
+      @name = name.downcase
       @type = type
     end
 
@@ -160,7 +183,7 @@ module SSM
 
     def initialize index, name, args, desc
       @index = index
-      @name = name
+      @name = name.downcase
       @args = args
       @desc = desc
     end
@@ -191,7 +214,7 @@ module SSM
 
     def initialize index, name, desc
       @index = index
-      @name = name
+      @name = name.downcase
       @desc = desc
     end
 
@@ -229,7 +252,7 @@ module SSM
       # Load args
       @types = {}
       hash["types"].each do |k, v|
-        @types[k] = Type.from_hash v
+        @types[k.downcase] = Type.from_hash v
       end
 
       # Load ops
@@ -254,6 +277,26 @@ module SSM
       self
     end
 
+    def type key
+      @types[key.downcase]
+    end
+
+    def op key
+      if key.is_a? Integer
+        @ops_arr[key]
+      else
+        @ops[key.downcase]
+      end
+    end
+
+    def magic key
+      if key.is_a? Integer
+        @magic_arr[key]
+      else
+        @magics[key.downcase]
+      end
+    end
+
     def load_from_json json
       load_from_hash JSON.parse json
     end
@@ -263,9 +306,9 @@ module SSM
     end
   end
 
-  def spec
+  def self.spec
     json_filename = ENV["SSM_SPEC_JSON"]
-    json_filename = "spec.json" if json_filename.is_nil?
-    @Spec.new.load_from_json_file json_filename
+    json_filename = "spec.json" if json_filename.nil?
+    Spec.new.load_from_json_file json_filename
   end
 end
