@@ -1,3 +1,4 @@
+# Use `yq -o=json -I=0 data.yaml > data.json` to convert to json
 ---
 
 argTypes:
