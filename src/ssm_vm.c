@@ -8,13 +8,23 @@
 #include <ssm.h>
 #include <ssm_i.h>
 
+#include "./ssm_vm_header.c"
+
 // Code and helpers
 
 typedef struct Chunk {
-  struct Code *next;
+  struct Chunk *next;
   size_t n_code;
   ssmOp ops[1];
 } Chunk;
+
+static Chunk* allocChunk(size_t size) {
+  const size_t bytes = sizeof(Chunk) + size;
+  Chunk *c = aligned_alloc(SSM_WORD_SIZE, bytes);
+  c->next = NULL;
+  c->n_code = size;
+  return c;
+}
 
 static Chunk* openChunkFromFile(const char *filename) {
   // Read file
@@ -27,42 +37,99 @@ static Chunk* openChunkFromFile(const char *filename) {
   rewind(file);
 
   // Allocate code
-  Chunk *c = malloc(sizeof(Chunk) + size);
-  c->next = NULL;
-  c->n_code = size;
+  Chunk *c = allocChunk(size);
   fread(c->ops, 1, size, file);
+
+  // Close file
+  fclose(file);
   return c;
 }
 
-static int verifyCode(const ssmVM *vm, const Code *c) {
-  const uint8_t OP = 0x01;
-  const uint8_t JUMP_TARGET = 0x02;
-  // TODO: Check headers and VM config
-  unimplemented();
-  // TODO: Try to allocate same size of memory
-  unimplemented();
-  // TODO: 1st loop through all instructions
-  unimplemented();
+static Chunk* openChunkFromMemory(
+  const char *data,
+  size_t size
+) {
+  Chunk *c = allocChunk(size);
+  memcpy(c->ops, data, size);
+  return c;
+}
+
+static const char* verifyChunk(ssmVM *vm, Chunk *c) {
+  // First allocate same size bytes for marking
+  uint8_t *mark = malloc(c->n_code);
+  if(mark == NULL) {
+    return "SSMVeriCh: cannot allocate mark";
+  }
+  
+  // Return value. When return, use goto L_ret
+  const char *ret = NULL;
+
+  // Initialize marks
+  memset(mark, 0, c->n_code);
+
+  // Marks
+  #define M_OP 0x01
+  #define M_JMP_TARGET 0x02
+  #define M_X_FN 0x04
+  #define M_FN_TARGET 0x08
+
+  // Check header
+
+  // Check opcodes
   size_t i;
   for(i = 0; i < c->n_code;) {
     ssmOp op = c->ops[i];
-    // TODO: Calculate the size of opcode and operands
-    unimplemented();
-    // TODO: Mark the opcode position as OP
-    unimplemented();
-    // TODO: Mark the jump target position as JUMP_TARGET
-    unimplemented();
+    // Check header appears only at the beginning
+    if(i > 0 && op == SSM_OP_HEADER) {
+      ret = "SSMVeriCh: header appears not at the beginning";
+      goto L_ret;
+    }
+    // Mark ad op
+    mark[i] |= M_OP;
+    // Next loop
+    #include "./ssm_vm_verify_loop.c"
   }
-  // TODO: 2nd loop
-  for(i = 0; i < c->n_code;) {
-    // TODO: Check mark
-    // If JUMP_TARGET is marked, it must be OP
-    unimplemented();
-  }
-  // DONE
-  return 0;
-}
 
+  // Check code size
+  if(i != c->n_code) {
+    ret = "SSMVeriCh: code size mismatch";
+    goto L_ret;
+  }
+
+  // Check by marks
+  for(size_t i = 0; i < c->n_code;) {
+    // Jump target must be an opcode
+    if(mark[i] & M_JMP_TARGET && !(mark[i] & M_OP)) {
+      ret = "SSMVeriCh: jump target is not an opcode";
+      goto L_ret;
+    }
+    // Function target must be x_fn
+    if(mark[i] & M_FN_TARGET && !(mark[i] & M_X_FN)) {
+      ret = "SSMVeriCh: function target is not x_fn";
+      goto L_ret;
+    }
+  }
+
+  // Undef marks
+  #undef M_OP
+  #undef M_JMP_TARGET
+  #undef M_X_FN
+  #undef M_FN_TARGET
+
+L_ret:
+  // Finalize
+  free(mark);
+  return ret;
+L_err_magic:
+  ret = "SSMVeriCh: invalid magic";
+  goto L_ret;
+L_err_op:
+  ret = "SSMVeriCh: invalid opcode";
+  goto L_ret;
+L_err_offset:
+  ret = "SSMVeriCh: offset points to out of chunk";
+  goto L_ret;
+}
 
 void ssmLoadDefaultConfig(ssmConfig* config) {
   // 100%
@@ -136,31 +203,39 @@ int ssmLoadCode(ssmVM *vm, const ssmOp *code, size_t n_code) {
 #define THREADED_CODE
 
 // --- VM Interpreter BEGIN ---
+
 void ssmRunVM(ssmVM* vm, ssmV entry_ip) {
   ssmOp *ip = vm->code + entry_ip;
 
   // Initialize macros
-#ifdef THREADED_CODE
-  #define OP(op) L_op_##op
-  #define NEXT(n) goto *jump_table[*(ip += n)]
-#else
-  #define OP(op) case op
-  #define NEXT(n) ip += n; break;
-#endif
+  #ifdef THREADED_CODE
+    // Using direct threading
+    #define OP(op) L_op_##op
+    #define NEXT(n) goto *jump_table[*(ip += n)]
 
-#ifdef THREADED_CODE
-  static void *jump_table[] =
-#include "./ssm_vm_jmptbl.c"
-  NEXT(0);
-#else
-  for(;;) { switch(*ip) {
-#endif
+    static void *jump_table[] =
+      #include "./ssm_vm_jmptbl.c"
+    ;
 
-#include "./ssm_vm_switch.c"
+  #else
+    #define OP(op) case op
+    #define NEXT(n) ip += n; break
+  #endif
+
+  #ifdef THREADED_CODE
+    NEXT(0);
+  #else
+    for(;;) {
+      switch(*ip) {
+  #endif
+
+  #include "./ssm_vm_switch.c"
     
-#ifdef THREADED_CODE
-#else
-  } }
-#endif
+  #ifdef THREADED_CODE
+  #else
+    }
+  }
+  #endif
 }
+
 // --- VM Interpreter END ---

@@ -99,8 +99,8 @@ opcodes:
 - name: PUSHFN
   args:
   - name: fn_off
-    type: u16
-  desc: Create a function at (ip + fn_off) with no captures.
+    type: o32
+  desc: Create a function at (ip + fn_off) with no captures. Note that (ip + fn_off) must be aligned by 2.
 # Global
 - name: PUSHGLOBAL
   args:
@@ -314,7 +314,7 @@ opcodes:
     type: u16
   - name: stack_size
     type: u16
-  desc: Function header. Argc is the number of arguments, stack size is the maximum size need to run functions
+  desc: Function header. Argc is the number of arguments, stack size is the maximum size need to run functions. Note that ip of xfn must be aligned by 2.
 # Header
 - name: HEADER
   args:
@@ -326,7 +326,7 @@ opcodes:
     type: u32
   - name: global_count
     type: u32
-  desc: Chunk header
+  desc: Chunk header. Only one header is allowed & required for each chunk, and it must be the first instruction. When the chunk is loaded, check the correctness using arguments. When the chunk is executed, the header is ignored and push ip=0 as a return address. When program return to this header, VM will be halted.
 
 magics:
 # Nop
