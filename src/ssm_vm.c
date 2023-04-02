@@ -86,6 +86,9 @@ static const char* verifyChunk(ssmVM *vm, Chunk *c) {
     }
     // Mark ad op
     mark[i] |= M_OP;
+
+    // TODO: Check global index is valid (put in cgen)
+
     // Next loop
     #include "./ssm_vm_verify_loop.c"
   }
@@ -187,7 +190,7 @@ int ssmLoadFile(ssmVM *vm, const char *filename) {
   return 0;
 }
 
-int ssmLoadCode(ssmVM *vm, const ssmOp *code, size_t n_code) {
+int ssmLoadString(ssmVM *vm, const ssmOp *code, size_t n_code) {
   // Allocate code
   Code *c = malloc(sizeof(Code) + n_code);
   c->next = vm->code;
@@ -229,6 +232,7 @@ void ssmRunVM(ssmVM* vm, ssmV entry_ip) {
       switch(*ip) {
   #endif
 
+  // TODO: Fill switch
   #include "./ssm_vm_switch.c"
     
   #ifdef THREADED_CODE

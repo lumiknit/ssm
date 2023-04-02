@@ -21,6 +21,8 @@ ALL_OBJS=ssm.o ssm_test.o $(VM_OBJS) $(RT_OBJS)
 
 .PHONY: all test clean
 
+# TODO: Add preprocessing (spec.yaml, cgen)
+
 all: $(EXE_TARGET) $(LIB_TARGET).so $(LIB_TARGET).a $(TEST_TARGET)
 
 $(EXE_TARGET): $(EXE_OBJS)
