@@ -19,11 +19,17 @@ TEST_OBJS=ssm_test.o $(VM_OBJS) $(RT_OBJS)
 ALL_OBJS=ssm.o ssm_test.o $(VM_OBJS) $(RT_OBJS)
 
 
-.PHONY: all test clean
+.PHONY: all preprocess test clean
 
 # TODO: Add preprocessing (spec.yaml, cgen)
 
-all: $(EXE_TARGET) $(LIB_TARGET).so $(LIB_TARGET).a $(TEST_TARGET)
+all: preprocess $(EXE_TARGET) $(LIB_TARGET).so $(LIB_TARGET).a $(TEST_TARGET)
+
+preprocess:
+	@echo "[INFO] Generate spec.json"
+	./opcodes/spec.yaml
+	@echo "[INFO] Generate C codes"
+	./opcodes/cgen.rb
 
 $(EXE_TARGET): $(EXE_OBJS)
 	$(CC) $(LDFLAGS) -o $@ $^

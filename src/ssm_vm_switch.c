@@ -2,273 +2,273 @@
 // If this file is modified, please add a comment
 
 
-OP(NOP) {
+OP(NOP): {
   unimplemented();
   NEXT(1);
 }
-OP(POP) {
-  register uint16_t count = read_uint16_t(ip + 1);
+OP(POP): {
+  uint16_t count = read_uint16_t(ip + 1);
   unimplemented();
   NEXT(3);
 }
-OP(PUSH) {
-  register uint16_t off = read_uint16_t(ip + 1);
+OP(PUSH): {
+  uint16_t off = read_uint16_t(ip + 1);
   unimplemented();
   NEXT(3);
 }
-OP(PUSHBP) {
-  register uint16_t off_bp = read_uint16_t(ip + 1);
+OP(PUSHBP): {
+  uint16_t off_bp = read_uint16_t(ip + 1);
   unimplemented();
   NEXT(3);
 }
-OP(PUSHAP) {
-  register uint16_t off_ap = read_uint16_t(ip + 1);
+OP(PUSHAP): {
+  uint16_t off_ap = read_uint16_t(ip + 1);
   unimplemented();
   NEXT(3);
 }
-OP(POPSET) {
-  register uint16_t off_sp = read_uint16_t(ip + 1);
+OP(POPSET): {
+  uint16_t off_sp = read_uint16_t(ip + 1);
   unimplemented();
   NEXT(3);
 }
-OP(PUSHI) {
-  register int32_t value = read_int32_t(ip + 1);
+OP(PUSHI): {
+  int32_t value = read_int32_t(ip + 1);
   unimplemented();
   NEXT(5);
 }
-OP(PUSHF) {
-  register float32_t value = read_float32_t(ip + 1);
+OP(PUSHF): {
+  float32_t value = read_float32_t(ip + 1);
   unimplemented();
   NEXT(5);
 }
-OP(PUSHFN) {
-  register int32_t fn_off = read_int32_t(ip + 1);
+OP(PUSHFN): {
+  int32_t fn_off = read_int32_t(ip + 1);
   unimplemented();
   NEXT(5);
 }
-OP(PUSHGLOBAL) {
-  register uint32_t index = read_uint32_t(ip + 1);
+OP(PUSHGLOBAL): {
+  uint32_t global = read_uint32_t(ip + 1);
   unimplemented();
   NEXT(5);
 }
-OP(POPSETGLOBAL) {
-  register uint32_t index = read_uint32_t(ip + 1);
+OP(POPSETGLOBAL): {
+  uint32_t global = read_uint32_t(ip + 1);
   unimplemented();
   NEXT(5);
 }
-OP(PUSHISLONG) {
-  register uint16_t off = read_uint16_t(ip + 1);
+OP(PUSHISLONG): {
+  uint16_t off = read_uint16_t(ip + 1);
   unimplemented();
   NEXT(3);
 }
-OP(TUP) {
-  register uint16_t tag = read_uint16_t(ip + 1);
-  register uint16_t count = read_uint16_t(ip + 3);
+OP(TUP): {
+  uint16_t tag = read_uint16_t(ip + 1);
+  uint16_t count = read_uint16_t(ip + 3);
   unimplemented();
   NEXT(5);
 }
-OP(PUSHTAG) {
-  register uint16_t off = read_uint16_t(ip + 1);
+OP(PUSHTAG): {
+  uint16_t off = read_uint16_t(ip + 1);
   unimplemented();
   NEXT(3);
 }
-OP(PUSHLEN) {
-  register uint16_t off = read_uint16_t(ip + 1);
+OP(PUSHLEN): {
+  uint16_t off = read_uint16_t(ip + 1);
   unimplemented();
   NEXT(3);
 }
-OP(PUSHELEM) {
-  register uint16_t off = read_uint16_t(ip + 1);
-  register uint16_t index = read_uint16_t(ip + 3);
+OP(PUSHELEM): {
+  uint16_t off = read_uint16_t(ip + 1);
+  uint16_t index = read_uint16_t(ip + 3);
   unimplemented();
   NEXT(5);
 }
-OP(LONG) {
-  register uint32_t bytes_len = read_uint32_t(ip + 1);
-  register uint8_t* bytes = (uint8_t*)(ip + 5);
+OP(LONG): {
+  uint32_t bytes_len = read_uint32_t(ip + 1);
+  uint8_t* bytes = (uint8_t*)(ip + 5);
   // Use read_uint8_t(&bytes + IDX) to get elements
   unimplemented();
   NEXT(5 + bytes_len * sizeof(uint8_t));
 }
-OP(POPSETBYTE) {
-  register uint16_t off = read_uint16_t(ip + 1);
+OP(POPSETBYTE): {
+  uint16_t off = read_uint16_t(ip + 1);
   unimplemented();
   NEXT(3);
 }
-OP(PUSHLONGLEN) {
-  register uint16_t off = read_uint16_t(ip + 1);
+OP(PUSHLONGLEN): {
+  uint16_t off = read_uint16_t(ip + 1);
   unimplemented();
   NEXT(3);
 }
-OP(PUSHBYTE) {
-  register uint16_t off = read_uint16_t(ip + 1);
+OP(PUSHBYTE): {
+  uint16_t off = read_uint16_t(ip + 1);
   unimplemented();
   NEXT(3);
 }
-OP(JOIN) {
+OP(JOIN): {
   unimplemented();
   NEXT(1);
 }
-OP(SUBLONG) {
+OP(SUBLONG): {
   unimplemented();
   NEXT(1);
 }
-OP(LONGCMP) {
+OP(LONGCMP): {
   unimplemented();
   NEXT(1);
 }
-OP(APP) {
-  register uint16_t count = read_uint16_t(ip + 1);
+OP(APP): {
+  uint16_t count = read_uint16_t(ip + 1);
   unimplemented();
   NEXT(3);
 }
-OP(RET) {
-  register uint16_t off = read_uint16_t(ip + 1);
+OP(RET): {
+  uint16_t off = read_uint16_t(ip + 1);
   unimplemented();
   NEXT(3);
 }
-OP(RETAPP) {
-  register uint16_t count = read_uint16_t(ip + 1);
+OP(RETAPP): {
+  uint16_t count = read_uint16_t(ip + 1);
   unimplemented();
   NEXT(3);
 }
-OP(INTADD) {
+OP(INTADD): {
   unimplemented();
   NEXT(1);
 }
-OP(INTSUB) {
+OP(INTSUB): {
   unimplemented();
   NEXT(1);
 }
-OP(INTMUL) {
+OP(INTMUL): {
   unimplemented();
   NEXT(1);
 }
-OP(UINTMUL) {
+OP(UINTMUL): {
   unimplemented();
   NEXT(1);
 }
-OP(INTDIV) {
+OP(INTDIV): {
   unimplemented();
   NEXT(1);
 }
-OP(UINTDIV) {
+OP(UINTDIV): {
   unimplemented();
   NEXT(1);
 }
-OP(INTMOD) {
+OP(INTMOD): {
   unimplemented();
   NEXT(1);
 }
-OP(UINTMOD) {
+OP(UINTMOD): {
   unimplemented();
   NEXT(1);
 }
-OP(INTUNM) {
+OP(INTUNM): {
   unimplemented();
   NEXT(1);
 }
-OP(INTSHL) {
+OP(INTSHL): {
   unimplemented();
   NEXT(1);
 }
-OP(INTSHR) {
+OP(INTSHR): {
   unimplemented();
   NEXT(1);
 }
-OP(UINTSHR) {
+OP(UINTSHR): {
   unimplemented();
   NEXT(1);
 }
-OP(INTAND) {
+OP(INTAND): {
   unimplemented();
   NEXT(1);
 }
-OP(INTOR) {
+OP(INTOR): {
   unimplemented();
   NEXT(1);
 }
-OP(INTXOR) {
+OP(INTXOR): {
   unimplemented();
   NEXT(1);
 }
-OP(INTNEG) {
+OP(INTNEG): {
   unimplemented();
   NEXT(1);
 }
-OP(INTLT) {
+OP(INTLT): {
   unimplemented();
   NEXT(1);
 }
-OP(INTLE) {
+OP(INTLE): {
   unimplemented();
   NEXT(1);
 }
-OP(FLOATADD) {
+OP(FLOATADD): {
   unimplemented();
   NEXT(1);
 }
-OP(FLOATSUB) {
+OP(FLOATSUB): {
   unimplemented();
   NEXT(1);
 }
-OP(FLOATMUL) {
+OP(FLOATMUL): {
   unimplemented();
   NEXT(1);
 }
-OP(FLOATDIV) {
+OP(FLOATDIV): {
   unimplemented();
   NEXT(1);
 }
-OP(FLOATUNM) {
+OP(FLOATUNM): {
   unimplemented();
   NEXT(1);
 }
-OP(FLOATLT) {
+OP(FLOATLT): {
   unimplemented();
   NEXT(1);
 }
-OP(FLOATLE) {
+OP(FLOATLE): {
   unimplemented();
   NEXT(1);
 }
-OP(EQ) {
+OP(EQ): {
   unimplemented();
   NEXT(1);
 }
-OP(NE) {
+OP(NE): {
   unimplemented();
   NEXT(1);
 }
-OP(JMP) {
-  register int32_t off = read_int32_t(ip + 1);
+OP(JMP): {
+  int32_t off = read_int32_t(ip + 1);
   unimplemented();
   NEXT(5);
 }
-OP(BEZ) {
-  register int16_t off = read_int16_t(ip + 1);
+OP(BEZ): {
+  int16_t off = read_int16_t(ip + 1);
   unimplemented();
   NEXT(3);
 }
-OP(BNE) {
-  register int16_t off = read_int16_t(ip + 1);
+OP(BNE): {
+  int16_t off = read_int16_t(ip + 1);
   unimplemented();
   NEXT(3);
 }
-OP(BTAG) {
-  register uint16_t tag = read_uint16_t(ip + 1);
-  register int16_t off = read_int16_t(ip + 3);
+OP(BTAG): {
+  uint16_t tag = read_uint16_t(ip + 1);
+  int16_t off = read_int16_t(ip + 3);
   unimplemented();
   NEXT(5);
 }
-OP(JTAG) {
-  register uint32_t jump_table_len = read_uint32_t(ip + 1);
-  register int32_t* jump_table = (int32_t*)(ip + 5);
+OP(JTAG): {
+  uint32_t jump_table_len = read_uint32_t(ip + 1);
+  int32_t* jump_table = (int32_t*)(ip + 5);
   // Use read_int32_t(&jump_table + IDX) to get elements
   unimplemented();
   NEXT(5 + jump_table_len * sizeof(int32_t));
 }
-OP(MAGIC) {
+OP(MAGIC): {
   // Handle magic
   switch(read_uint16_t(ip + 1)) {
   case SSM_MAGIC_NOP: {
@@ -571,17 +571,17 @@ OP(MAGIC) {
   unimplemented();
   NEXT(1);
 }
-OP(XFN) {
-  register uint16_t argc = read_uint16_t(ip + 1);
-  register uint16_t stack_size = read_uint16_t(ip + 3);
+OP(XFN): {
+  uint16_t argc = read_uint16_t(ip + 1);
+  uint16_t stack_size = read_uint16_t(ip + 3);
   unimplemented();
   NEXT(5);
 }
-OP(HEADER) {
-  register uint32_t version = read_uint32_t(ip + 1);
-  register uint32_t chunk_size = read_uint32_t(ip + 5);
-  register uint32_t global_offset = read_uint32_t(ip + 9);
-  register uint32_t global_count = read_uint32_t(ip + 13);
+OP(HEADER): {
+  uint32_t version = read_uint32_t(ip + 1);
+  uint32_t chunk_size = read_uint32_t(ip + 5);
+  uint32_t global_offset = read_uint32_t(ip + 9);
+  uint32_t global_count = read_uint32_t(ip + 13);
   unimplemented();
   NEXT(17);
 }

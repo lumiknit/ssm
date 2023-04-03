@@ -19,5 +19,5 @@ int readOpHeader(OpHeader *header, const uint8_t *ip) {
   header->chunk_size = read_uint32_t(ip + 5);
   header->global_offset = read_uint32_t(ip + 9);
   header->global_count = read_uint32_t(ip + 13);
-  return 1;
+  return 17;
 }

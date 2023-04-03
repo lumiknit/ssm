@@ -28,16 +28,14 @@ void ssmLoadDefaultConfig(ssmConfig* config);
 typedef struct ssmVM {
   ssmMem mem;
 
-  size_t n_code;
-  void *code;
+  size_t n_chunks;
+  void *chunks;
 } ssmVM;
 
 void ssmInitVM(ssmVM* vm, ssmConfig* config);
 void ssmFiniVM(ssmVM* vm);
 
 int ssmLoadFile(ssmVM *vm, const char *filename);
-int ssmLoadString(ssmVM *vm, const ssmOp *code, size_t n_code);
-
-void ssmRunVM(ssmVM* vm, ssmV entry_ip);
+int ssmLoadString(ssmVM *vm, size_t size, const ssmOp *code);
 
 #endif

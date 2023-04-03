@@ -37,7 +37,7 @@ module SSM
         pack = directives[b]
         raise "Invalid size for IntRawType" unless pack
         new b, t, pack, "i#{8 * b}", "int#{8 * b}_t"
-      when "uint", "magic"
+      when "uint", "global", "magic"
         directives = {1 => "C", 2 => "S<", 4 => "L<", 8 => "Q<"}
         pack = directives[b]
         raise "Invalid size for IntRawType" unless pack

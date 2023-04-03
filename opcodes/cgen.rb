@@ -96,7 +96,7 @@ def gen_header
     #{lst
         .map{|a| "  header->#{a[:name]} = read_#{a[:ctype]}(ip + #{a[:offset]});"}
         .join "\n"}
-      return 1;
+      return #{offset};
     }
   EOF
 end
@@ -126,11 +126,11 @@ def gen_verify_loop
       if arg.type.is_a? SSM::ArrayType
         len_type = arg.type.len_type
         elem_type = arg.type.elem_type
-        body << "register #{len_type.ctype} #{arg.name}_len = read_#{len_type.ctype}(&c->ops[i + #{p}#{p_extra}]);"
+        body << "#{len_type.ctype} #{arg.name}_len = read_#{len_type.ctype}(&c->bytes[i + #{p}#{p_extra}]);"
         if elem_type.kind == "offset"
-          body << "for(int #{arg.name}_i = 0; #{arg.name}_i < #{arg.name}_len; #{arg.name}_i++) {"
-          body << "  register #{elem_type.ctype} #{arg.name}_elem = read_#{elem_type.ctype}(&c->ops[i + #{p} + #{arg.name}_i * sizeof(#{elem_type.ctype})#{p_extra}]);"
-          body << "  if(i + #{arg.name}_elem < 0 || i + #{arg.name}_elem >= c->n_code)"
+          body << "for(size_t #{arg.name}_i = 0; #{arg.name}_i < #{arg.name}_len; #{arg.name}_i++) {"
+          body << "  #{elem_type.ctype} #{arg.name}_elem = read_#{elem_type.ctype}(&c->bytes[i + #{p} + #{arg.name}_i * sizeof(#{elem_type.ctype})#{p_extra}]);"
+          body << "  if(i + #{arg.name}_elem < 0 || i + #{arg.name}_elem >= c->size)"
           body << "    goto L_err_offset;"
           body << "  mark[i + #{arg.name}_elem] |= M_JMP_TARGET;"
           body << "}"
@@ -140,18 +140,22 @@ def gen_verify_loop
       elsif arg.type.is_a? SSM::LitType
         type = arg.type.type
         if type.kind == "magic"
-          body << "register #{type.ctype} #{arg.name} = read_#{type.ctype}(&c->ops[i + #{p}#{p_extra}]);"
+          body << "#{type.ctype} #{arg.name} = read_#{type.ctype}(&c->bytes[i + #{p}#{p_extra}]);"
           body << "if(#{arg.name} >= #{$spec.magic_arr.length})"
           body << "  goto L_err_magic;"
         elsif type.kind == "offset"
-          body << "register #{type.ctype} #{arg.name} = read_#{type.ctype}(&c->ops[i + #{p}#{p_extra}]);"
-          body << "if(i + #{arg.name} < 0 || i + #{arg.name} >= c->n_code)"
+          body << "#{type.ctype} #{arg.name} = read_#{type.ctype}(&c->bytes[i + #{p}#{p_extra}]);"
+          body << "if(i + #{arg.name} < 0 || i + #{arg.name} >= c->size)"
           body << "  goto L_err_offset;"
           if flags[:pushfn]
-            body << "mark[i + #{arg.name}] |= M_PUSH_FN;"
+            body << "mark[i + #{arg.name}] |= M_FN_TARGET;"
           else
             body << "mark[i + #{arg.name}] |= M_JMP_TARGET;"
           end
+        elsif type.kind == "global"
+          body << "#{type.ctype} #{arg.name} = read_#{type.ctype}(&c->bytes[i + #{p}#{p_extra}]);"
+          body << "if(#{arg.name} >= n_globals)"
+          body << "  goto L_err_global;"
         end
         type = arg.type.type
         p += type.bytes
@@ -194,7 +198,7 @@ def gen_opcode_switch
   path = File.join $src_path, "ssm_vm_switch.c"
 
   lines = $spec.ops_arr.map do |o|
-    open = "OP(#{o.name.upcase}) {"
+    open = "OP(#{o.name.upcase}): {"
     args = []
     p = 1
     p_extra = "";
@@ -203,9 +207,9 @@ def gen_opcode_switch
       if arg.type.is_a? SSM::ArrayType
         len_type = arg.type.len_type
         elem_type = arg.type.elem_type
-        args << "register #{len_type.ctype} #{arg.name}_len = read_#{len_type.ctype}(ip + #{p}#{p_extra});"
+        args << "#{len_type.ctype} #{arg.name}_len = read_#{len_type.ctype}(ip + #{p}#{p_extra});"
         p += len_type.bytes
-        args << "register #{elem_type.ctype}* #{arg.name} = (#{elem_type.ctype}*)(ip + #{p}#{p_extra});"
+        args << "#{elem_type.ctype}* #{arg.name} = (#{elem_type.ctype}*)(ip + #{p}#{p_extra});"
         args << "// Use read_#{elem_type.ctype}(&#{arg.name} + IDX) to get elements"
         p_extra += " + #{arg.name}_len * sizeof(#{elem_type.ctype})"
       elsif arg.type.is_a? SSM::LitType and arg.type.type.kind == "magic"
@@ -221,7 +225,7 @@ def gen_opcode_switch
         args << "}"
       else
         type = arg.type.type
-        args << "register #{type.ctype} #{arg.name} = read_#{type.ctype}(ip + #{p}#{p_extra});"
+        args << "#{type.ctype} #{arg.name} = read_#{type.ctype}(ip + #{p}#{p_extra});"
         p += type.bytes
       end
     end

@@ -10,26 +10,20 @@ metadata:
   version: 0.1.0
 
 types:
-  u8:
-    type: uint
-    bytes: 1
   u16:
     type: uint
     bytes: 2
   u32:
     type: uint
     bytes: 4
-  i8:
-    type: int
-    bytes: 1
-  i16:
-    type: int
-    bytes: 2
   i32:
     type: int
     bytes: 4
   f32:
     type: float
+    bytes: 4
+  g32:
+    type: global
     bytes: 4
   o16:
     type: offset
@@ -104,13 +98,13 @@ opcodes:
 # Global
 - name: PUSHGLOBAL
   args:
-  - name: index
-    type: u32
+  - name: global
+    type: g32
   desc: Push index-th global
 - name: POPSETGLOBAL
   args:
-  - name: index
-    type: u32
+  - name: global
+    type: g32
   desc: Pop and set into index-th global
 # Tuple
 - name: PUSHISLONG
