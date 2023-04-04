@@ -37,7 +37,7 @@ OP(PUSHI): {
   NEXT(5);
 }
 OP(PUSHF): {
-  float32_t value = read_float32_t(ip + 1);
+  float value = read_float(ip + 1);
   unimplemented();
   NEXT(5);
 }

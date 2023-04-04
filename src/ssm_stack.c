@@ -5,7 +5,7 @@
  * @copyright This file is part of ssm.
  */
 
-#include <ssm_rt.h>
+#include <ssm.h>
 #include <ssm_i.h>
 
 ssmStack* ssmNewStack(size_t size, int r2l) {

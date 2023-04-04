@@ -44,9 +44,10 @@ module SSM
         new b, t, pack, "u#{8 * b}", "uint#{8 * b}_t"
       when "float"
         directives = {4 => "e", 8 => "E"}
+        ctype = {4 => "float", 8 => "double"}
         pack = directives[b]
         raise "Invalid size for IntRawType" unless pack
-        new b, t, pack, "f#{8 * b}", "float#{8 * b}_t"
+        new b, t, pack, "f#{8 * b}", ctype[b]
       else
         raise "Unknown type #{t} and bytes #{b}"
       end
