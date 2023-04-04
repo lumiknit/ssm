@@ -147,6 +147,12 @@ L_err_offset:
 L_err_global:
   ret = "SSMVeriCh: global points to out of chunk";
   goto L_ret;
+L_err_left_aligned:
+  ret = "SSMVeriCh: some opcodes must be left aligned";
+  goto L_ret;
+L_err_right_aligned:
+  ret = "SSMVeriCh: some opcodes must be right aligned";
+  goto L_ret;
 }
 
 // --- VM Initialization
@@ -201,7 +207,7 @@ int ssmLoadFile(ssmVM *vm, const char *filename) {
   rewind(file);
 
   // Allocate Chunk
-  Chunk *c = malloc(sizeof(Chunk) + size);
+  Chunk *c = aligned_alloc(SSM_WORD_SIZE, sizeof(Chunk) + size);
   c->next = NULL;
   c->size = size;
   fread(c->bytes, 1, size, file);
@@ -212,7 +218,7 @@ int ssmLoadFile(ssmVM *vm, const char *filename) {
 
 int ssmLoadString(ssmVM *vm, size_t size, const ssmOp *code) {
   // Allocate code
-  Chunk *c = malloc(sizeof(Chunk) + size);
+  Chunk *c = aligned_alloc(SSM_WORD_SIZE, sizeof(Chunk) + size);
   c->next = NULL;
   c->size = size;
   memcpy(c->bytes, code, size);
@@ -241,18 +247,31 @@ static int ssmLoadChunk(ssmVM *vm, Chunk *c) {
 static int ssmRunVM(ssmVM* vm, Chunk *c) {
   // Initialize
 
+  // Create aligned zero for dummy function
+  union aligned_zero {
+    uint8_t u8[16];
+  } aligned_zero_pack = {0};
+  uint8_t *aligned_zero = aligned_zero_pack.u8;
+  if((uintptr_t)aligned_zero % 2 != 0) {
+    aligned_zero += 1;
+  }
+
   // Push chunk
   c->next = vm->chunks;
   vm->chunks = c;
   vm->n_chunks++;
 
   // Create registers
-  ssmOp *ip = c->bytes;
+  ssmReg reg = {
+    .ip = c->bytes,
+    .sp = vm->mem.stack->vals + vm->mem.stack->top,
+    .bp = vm->mem.stack->vals + vm->mem.stack->top,
+  };
 
   { // Parse header
     OpHeader h;
-    int read = readOpHeader(&h, ip);
-    ip += read;
+    int read = readOpHeader(&h, reg.ip);
+    reg.ip += read;
 
     // Change globals
     size_t new_size = h.global_offset + h.global_count;
@@ -262,25 +281,36 @@ static int ssmRunVM(ssmVM* vm, Chunk *c) {
     vm->mem.global->top = new_size;
   }
 
+  // Helper Macros
+  // Pointer must be pushed 
+#define PUSH_PTR(p)
+
+  // Push dummy function for return
+  *(--reg.sp) = ssmPtr2Val(aligned_zero);
+  // Push ip
+  *(--reg.sp) = ssmPtr2Val(c->bytes);
+  // Push bp
+  *(--reg.sp) = ssmUint2Val(vm->mem.stack->vals_hi - reg.bp);
+
   // Initialize macros
   #ifdef THREADED_CODE
     // Using direct threading
     #define OP(op) L_op_##op
-    #define NEXT(n) goto *jump_table[*(ip += n)]
+    #define NEXT(n) goto *jump_table[*(reg.ip += n)]
 
     static void *jump_table[] =
       #include "./ssm_vm_jmptbl.c"
     ;
   #else
     #define OP(op) case op
-    #define NEXT(n) ip += n; break
+    #define NEXT(n) reg.ip += n; break
   #endif
 
   #ifdef THREADED_CODE
     NEXT(0);
   #else
     for(;;) {
-      switch(*ip) {
+      switch(*reg.ip) {
   #endif
 
   // TODO: Fill switch

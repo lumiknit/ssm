@@ -8,7 +8,6 @@
 #include <stdint.h>
 
 typedef uint8_t ssmOp;
-
 #define SSM_OP_NOP ((ssmOp)0)
 #define SSM_OP_POP ((ssmOp)1)
 #define SSM_OP_PUSH ((ssmOp)2)

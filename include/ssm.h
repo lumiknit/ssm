@@ -71,19 +71,19 @@ typedef union ssmPtrUnion {
   void *ptr;
 } ssmPtrUnion;
 
-#define ssmVal2Int(v) (((ssmIptr)v) >> 1)
-#define ssmVal2Uint(v) (((ssmUptr)v) >> 1)
-#define ssmVal2Flt(v) (((ssmPtrUnion){.u = ((ssmUptr)v) & ~(ssmUptr)1}).f)
-#define ssmVal2Ptr(T, v) (((T*)(((ssmUptr)v) & ~(ssmUptr)1)))
-#define ssmVal2Tup(v) ((ssmT)v)
+#define ssmVal2Int(v) (((ssmIptr)(v)) >> 1)
+#define ssmVal2Uint(v) (((ssmUptr)(v)) >> 1)
+#define ssmVal2Flt(v) (((ssmPtrUnion){.u = ((ssmUptr)(v)) & ~(ssmUptr)1}).f)
+#define ssmVal2Ptr(T, v) (((T*)(((ssmUptr)(v)) & ~(ssmUptr)1)))
+#define ssmVal2Tup(v) ((ssmT)(v))
 
-#define ssmInt2Val(i) ((((ssmV)i) << 1) | 1)
-#define ssmUint2Val(u) ((((ssmV)u) << 1) | 1)
+#define ssmInt2Val(i) ((((ssmV)(i)) << 1) | 1)
+#define ssmUint2Val(u) ((((ssmV)(u)) << 1) | 1)
 #define ssmFlt2Val(fv) (((ssmPtrUnion){.f = (fv)}).u | 1)
-#define ssmPtr2Val(p) (((ssmV)p) | 1)
-#define ssmTup2Val(t) ((ssmV)t)
+#define ssmPtr2Val(p) (((ssmV)(p)) | 1)
+#define ssmTup2Val(t) ((ssmV)(t))
 
-#define ssmIsLiteral(v) (v & 1)
+#define ssmIsLiteral(v) ((v) & 1)
 #define ssmIsGCVal(v) (!ssmIsLiteral(v))
 
 
@@ -108,7 +108,7 @@ typedef union ssmPtrUnion {
  * and the sizes of long tuples is in bytes.
  */
 
-#define SSM_V_SHIFT(v, n) (((ssmV)v) << n)
+#define SSM_V_SHIFT(v, n) (((ssmV)(v)) << n)
 
 #define SSM_COLOR_SHIFT (SSM_WORD_BITS - 2)
 #define SSM_COLOR_WHITE SSM_V_SHIFT(0, SSM_COLOR_SHIFT)
@@ -144,23 +144,23 @@ typedef union ssmPtrUnion {
 #define ssmHdUnmarked(v) ((v) & ~SSM_COLOR_MASK)
 #define ssmHdMarked(v) ((v) | SSM_COLOR_MASK)
 
-#define ssmLongHd(size) (SSM_LONG_BIT | (((ssmV)size) & SSM_LONG_SIZE_MASK))
+#define ssmLongHd(size) (SSM_LONG_BIT | (((ssmV)(size)) & SSM_LONG_SIZE_MASK))
 #define ssmShortHd(tag, size) \
-  (((((ssmV)size) << SSM_SIZE_SHIFT) & SSM_SIZE_MASK) | \
-   (((ssmV)tag) & SSM_TAG_MASK))
+  (((((ssmV)(size)) << SSM_SIZE_SHIFT) & SSM_SIZE_MASK) | \
+   (((ssmV)(tag)) & SSM_TAG_MASK))
 
 
 // Tuple Helpers
 
-#define ssmTHd(t) ((ssmT)t)[0]
-#define ssmTMarkList(t) ((ssmT*)t)[-1]
-#define ssmTNext(t) ((ssmT*)t)[-2]
-#define ssmTElem(t, i) ((ssmT)t)[i + 1]
-#define ssmTByte(t, i) ((char*)((ssmT)t))[i]
+#define ssmTHd(t) ((ssmT)(t))[0]
+#define ssmTMarkList(t) ((ssmT*)(t))[-1]
+#define ssmTNext(t) ((ssmT*)(t))[-2]
+#define ssmTElem(t, i) ((ssmT)(t))[(i) + 1]
+#define ssmTByte(t, i) ((char*)((ssmT)(t)))[i]
 
-#define ssmTWords(words) (1 + words)
+#define ssmTWords(words) (1 + (words))
 #define ssmTWordsFromBytes(bytes) \
-  (1 + ((bytes + SSM_WORD_SIZE - 1) / SSM_WORD_SIZE))
+  (1 + (((bytes) + SSM_WORD_SIZE - 1) / SSM_WORD_SIZE))
 #define SSM_MINOR_TUP_EXTRA_WORDS 1
 #define SSM_MAJOR_TUP_EXTRA_WORDS 2
 
@@ -170,6 +170,7 @@ typedef union ssmPtrUnion {
 typedef struct ssmStack {
   size_t size;
   size_t top;
+  ssmV *vals_hi;
   ssmV vals[1];
 } ssmStack;
 
@@ -251,8 +252,16 @@ typedef struct ssmConfig {
 
 void ssmLoadDefaultConfig(ssmConfig* config);
 
+typedef uint8_t ssmOp;
+typedef struct ssmReg {
+  ssmOp *ip;
+  ssmV *sp;
+  ssmV *bp;
+} ssmReg;
+
 typedef struct ssmVM {
   ssmMem mem;
+  ssmReg reg;
 
   size_t n_chunks;
   void *chunks;

@@ -9,6 +9,9 @@ metadata:
   name: ssm-opcodes
   version: 0.1.0
 
+
+# --- Types -------------------------------------------------------------------
+
 types:
   u16:
     type: uint
@@ -47,17 +50,49 @@ types:
     type: magic
     bytes: 2
 
+
+# --- OpCodes -----------------------------------------------------------------
+
+# Call convention:
+# 1. Push arguments in reverse order
+# 2. Push the function
+# 3. App
+#   - Destruct the closure
+#   - Compare number of arguments and arity denoted in XFN
+#     - If arity is greater than # of arguments, pack into a closure and done.
+#   - Push number of arguments and function
+#   - Push ip
+#   - Push bp
+#   - Set bp as sp
+#   - Change ip to the function
+# Return convention:
+# 1. Move return value to temporary register
+# 2. Move sp to bp
+# 3. Pop bp
+# 4. Pop ip
+# 5. Pop left arguments
+# 6. Pop 1 (function) + # of arugments
+# 7. Push return value
+
+# Aligned option:
+# - aligned: left means the address of opcode must be aligned by 2.
+# - aligned: right means the address of opcode + args must be aligned by 2.
+
+
 opcodes:
 # No arguments
 - name: NOP
   args: []
   desc: Do Nothing
+  c_impl: ""
 # Stack
 - name: POP
   args:
   - name: count
     type: u16
   desc: Pop count items from the stack
+  c_impl: |-
+    reg.sp += count;
 - name: PUSH
   args:
   - name: off
@@ -169,6 +204,7 @@ opcodes:
   desc: Pop 2 values and push [sp] <=> [sp + 1] (-1 if <, 0 if ==, 1 if >)
 # Call
 - name: APP
+  aligned: right # Return address must be aligned
   args:
   - name: count
     type: u16
@@ -179,6 +215,7 @@ opcodes:
     type: u16
   desc: Return with the return value [sp + off]
 - name: RETAPP
+  aligned: right # return address must be aligned
   args:
   - name: count
     type: u16
@@ -303,6 +340,7 @@ opcodes:
   desc: Invoke magic
 # Literal Marker
 - name: XFN
+  aligned: left # Function start address must be aligned
   args:
   - name: argc
     type: u16
@@ -321,6 +359,9 @@ opcodes:
   - name: global_count
     type: u32
   desc: Chunk header. Only one header is allowed & required for each chunk, and it must be the first instruction. When the chunk is loaded, check the correctness using arguments. When the chunk is executed, the header is ignored and push ip=0 as a return address. When program return to this header, VM will be halted.
+
+
+# --- Magics ------------------------------------------------------------------
 
 magics:
 # Nop

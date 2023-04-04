@@ -85,12 +85,14 @@ case SSM_OP_LONGCMP: {
 } break;
 case SSM_OP_APP: {
   i += 3;
+  if(i % 2 != 0) goto L_err_right_aligned;
 } break;
 case SSM_OP_RET: {
   i += 3;
 } break;
 case SSM_OP_RETAPP: {
   i += 3;
+  if(i % 2 != 0) goto L_err_right_aligned;
 } break;
 case SSM_OP_INTADD: {
   i += 1;
@@ -205,9 +207,9 @@ case SSM_OP_JTAG: {
   uint32_t jump_table_len = read_uint32_t(&c->bytes[i + 1]);
   for(size_t jump_table_i = 0; jump_table_i < jump_table_len; jump_table_i++) {
     int32_t jump_table_elem = read_int32_t(&c->bytes[i + 1 + jump_table_i * sizeof(int32_t)]);
-    if(i + jump_table_elem < 0 || i + jump_table_elem >= c->size)
-      goto L_err_offset;
-    mark[i + jump_table_elem] |= M_JMP_TARGET;
+  if(i + jump_table_elem < 0 || i + jump_table_elem >= c->size)
+    goto L_err_offset;
+  mark[i + jump_table_elem] |= M_JMP_TARGET;
   }
   i += 5 + jump_table_len * sizeof(int32_t);
 } break;
@@ -219,6 +221,7 @@ case SSM_OP_MAGIC: {
 } break;
 case SSM_OP_XFN: {
   mark[i] |= M_X_FN;
+  if(i % 2 != 0) goto L_err_left_aligned;
   i += 5;
 } break;
 case SSM_OP_HEADER: {

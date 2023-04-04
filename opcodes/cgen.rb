@@ -22,21 +22,25 @@ $root_path = File.expand_path(File.join(script_path, ".."))
 $src_path = File.join($root_path, "src")
 $include_path = File.join($root_path, "include")
 
+# --- Helpers
+
+class String
+  def indent n
+    ' ' * n + self
+  end
+end
+
+class Array
+  def join_lines indent=0
+    self.map{|x| x.indent(indent)}.join("\n")
+  end
+end
+
 # --- Opcode Header
 
 def gen_opcode_hd
   filename = "ssm_ops"
   path = File.join($include_path, filename + ".h")
-  
-  ops = []
-  $spec.ops.each do |name, o|
-    ops << "#define SSM_OP_#{o.name.upcase} ((ssmOp)#{o.index})"
-  end
-
-  magics = []
-  $spec.magics.each do |name, m|
-    magics << "#define SSM_MAGIC_#{m.name.upcase} #{m.index}"
-  end
 
   File.write path, <<~EOF
     #{$file_header}
@@ -47,15 +51,14 @@ def gen_opcode_hd
     #include <stdint.h>
 
     typedef uint8_t ssmOp;
-
     #{$spec.ops_arr
       .map{|x| "#define SSM_OP_#{x.name.upcase} ((ssmOp)#{x.index})"}
-      .join("\n")}
+      .join_lines}
 
     typedef uint16_t ssmMagic;
     #{$spec.magic_arr
       .map{|x| "#define SSM_MAGIC_#{x.name.upcase} ((ssmMagic)#{x.index})"}
-      .join("\n")}
+      .join_lines}
 
     #endif
   EOF
@@ -84,9 +87,7 @@ def gen_header
     #include <stdint.h>
 
     typedef struct OpHeader {
-    #{lst
-        .map{|a| "  #{a[:ctype]} #{a[:name]};"}
-        .join "\n"}
+    #{lst.map{|a| "#{a[:ctype]} #{a[:name]};"}.join_lines(2)}
     } OpHeader;
 
     int readOpHeader(OpHeader *header, const uint8_t *ip) {
@@ -94,8 +95,8 @@ def gen_header
       if(ip[0] != SSM_OP_HEADER) return 0;
       // Read header
     #{lst
-        .map{|a| "  header->#{a[:name]} = read_#{a[:ctype]}(ip + #{a[:offset]});"}
-        .join "\n"}
+        .map{|a| "header->#{a[:name]} = read_#{a[:ctype]}(ip + #{a[:offset]});"}
+        .join_lines(2)}
       return #{offset};
     }
   EOF
@@ -119,6 +120,11 @@ def gen_verify_loop
       flags[:pushfn] = true
     end
 
+    # Check left aligned
+    if o.aligned == "left"
+      body << "if(i % 2 != 0) goto L_err_left_aligned;"
+    end
+
     p = 1
     p_extra = "";
     o.args.each do |arg|
@@ -129,10 +135,12 @@ def gen_verify_loop
         body << "#{len_type.ctype} #{arg.name}_len = read_#{len_type.ctype}(&c->bytes[i + #{p}#{p_extra}]);"
         if elem_type.kind == "offset"
           body << "for(size_t #{arg.name}_i = 0; #{arg.name}_i < #{arg.name}_len; #{arg.name}_i++) {"
-          body << "  #{elem_type.ctype} #{arg.name}_elem = read_#{elem_type.ctype}(&c->bytes[i + #{p} + #{arg.name}_i * sizeof(#{elem_type.ctype})#{p_extra}]);"
-          body << "  if(i + #{arg.name}_elem < 0 || i + #{arg.name}_elem >= c->size)"
-          body << "    goto L_err_offset;"
-          body << "  mark[i + #{arg.name}_elem] |= M_JMP_TARGET;"
+          body << [
+            "#{elem_type.ctype} #{arg.name}_elem = read_#{elem_type.ctype}(&c->bytes[i + #{p} + #{arg.name}_i * sizeof(#{elem_type.ctype})#{p_extra}]);",
+            "if(i + #{arg.name}_elem < 0 || i + #{arg.name}_elem >= c->size)",
+            "  goto L_err_offset;",
+            "mark[i + #{arg.name}_elem] |= M_JMP_TARGET;"
+          ].join_lines(2)
           body << "}"
         end
         p += len_type.bytes
@@ -164,6 +172,12 @@ def gen_verify_loop
       end
     end
     body << "i += #{p}#{p_extra};"
+
+    # Check right aligned
+    if o.aligned == "right"
+      body << "if(i % 2 != 0) goto L_err_right_aligned;"
+    end
+
     close = "} break;"
     ([open] + body.map{|x| "  " + x} + [close]).join "\n"
   end
@@ -186,9 +200,7 @@ def gen_opcode_jmptbl
     #{$file_header}
 
     {
-    #{$spec.ops_arr
-        .map{|x| "  &&L_op_#{x.name.upcase},"}
-        .join("\n")}
+    #{$spec.ops_arr.map{|x| "&&L_op_#{x.name.upcase},"}.join_lines(2)}
     }
   EOF
 end
@@ -207,15 +219,15 @@ def gen_opcode_switch
       if arg.type.is_a? SSM::ArrayType
         len_type = arg.type.len_type
         elem_type = arg.type.elem_type
-        args << "#{len_type.ctype} #{arg.name}_len = read_#{len_type.ctype}(ip + #{p}#{p_extra});"
+        args << "#{len_type.ctype} #{arg.name}_len = read_#{len_type.ctype}(reg.ip + #{p}#{p_extra});"
         p += len_type.bytes
-        args << "#{elem_type.ctype}* #{arg.name} = (#{elem_type.ctype}*)(ip + #{p}#{p_extra});"
+        args << "#{elem_type.ctype}* #{arg.name} = (#{elem_type.ctype}*)(reg.ip + #{p}#{p_extra});"
         args << "// Use read_#{elem_type.ctype}(&#{arg.name} + IDX) to get elements"
         p_extra += " + #{arg.name}_len * sizeof(#{elem_type.ctype})"
       elsif arg.type.is_a? SSM::LitType and arg.type.type.kind == "magic"
         # In this case, create switch case
         args << "// Handle magic"
-        args << "switch(read_#{arg.type.type.ctype}(ip + #{p}#{p_extra})) {"
+        args << "switch(read_#{arg.type.type.ctype}(reg.ip + #{p}#{p_extra})) {"
         $spec.magics.each do |name, m|
           args << "case SSM_MAGIC_#{m.name.upcase}: {"
           args << "  // #{m.name}"
@@ -225,19 +237,26 @@ def gen_opcode_switch
         args << "}"
       else
         type = arg.type.type
-        args << "#{type.ctype} #{arg.name} = read_#{type.ctype}(ip + #{p}#{p_extra});"
+        args << "#{type.ctype} #{arg.name} = read_#{type.ctype}(reg.ip + #{p}#{p_extra});"
         p += type.bytes
       end
     end
-    body = "unimplemented();"
-    close = "NEXT(#{p}#{p_extra});\n}"
-    open + "\n" + (args + [body, close]).map{|x| "  #{x}"}.join("\n")
+    # C implementation
+    if o.c_impl.nil?
+      impl = ["// TODO: Implement #{o.name}", "unimplemented();"]
+    else
+      impl = o.c_impl.strip.lines
+    end
+    impl << "NEXT(#{p}#{p_extra});"
+    body = (args + impl).join_lines 2
+    close = "}"
+    [open, body, close].join_lines
   end
 
   File.write path, <<~EOF
     #{$file_header}
 
-    #{lines.join "\n"}
+    #{lines.join_lines}
   EOF
 end
 

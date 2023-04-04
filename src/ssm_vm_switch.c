@@ -3,274 +3,329 @@
 
 
 OP(NOP): {
-  unimplemented();
   NEXT(1);
 }
 OP(POP): {
-  uint16_t count = read_uint16_t(ip + 1);
-  unimplemented();
+  uint16_t count = read_uint16_t(reg.ip + 1);
+  reg.sp += count;
   NEXT(3);
 }
 OP(PUSH): {
-  uint16_t off = read_uint16_t(ip + 1);
+  uint16_t off = read_uint16_t(reg.ip + 1);
+  // TODO: Implement push
   unimplemented();
   NEXT(3);
 }
 OP(PUSHBP): {
-  uint16_t off_bp = read_uint16_t(ip + 1);
+  uint16_t off_bp = read_uint16_t(reg.ip + 1);
+  // TODO: Implement pushbp
   unimplemented();
   NEXT(3);
 }
 OP(PUSHAP): {
-  uint16_t off_ap = read_uint16_t(ip + 1);
+  uint16_t off_ap = read_uint16_t(reg.ip + 1);
+  // TODO: Implement pushap
   unimplemented();
   NEXT(3);
 }
 OP(POPSET): {
-  uint16_t off_sp = read_uint16_t(ip + 1);
+  uint16_t off_sp = read_uint16_t(reg.ip + 1);
+  // TODO: Implement popset
   unimplemented();
   NEXT(3);
 }
 OP(PUSHI): {
-  int32_t value = read_int32_t(ip + 1);
+  int32_t value = read_int32_t(reg.ip + 1);
+  // TODO: Implement pushi
   unimplemented();
   NEXT(5);
 }
 OP(PUSHF): {
-  float value = read_float(ip + 1);
+  float value = read_float(reg.ip + 1);
+  // TODO: Implement pushf
   unimplemented();
   NEXT(5);
 }
 OP(PUSHFN): {
-  int32_t fn_off = read_int32_t(ip + 1);
+  int32_t fn_off = read_int32_t(reg.ip + 1);
+  // TODO: Implement pushfn
   unimplemented();
   NEXT(5);
 }
 OP(PUSHGLOBAL): {
-  uint32_t global = read_uint32_t(ip + 1);
+  uint32_t global = read_uint32_t(reg.ip + 1);
+  // TODO: Implement pushglobal
   unimplemented();
   NEXT(5);
 }
 OP(POPSETGLOBAL): {
-  uint32_t global = read_uint32_t(ip + 1);
+  uint32_t global = read_uint32_t(reg.ip + 1);
+  // TODO: Implement popsetglobal
   unimplemented();
   NEXT(5);
 }
 OP(PUSHISLONG): {
-  uint16_t off = read_uint16_t(ip + 1);
+  uint16_t off = read_uint16_t(reg.ip + 1);
+  // TODO: Implement pushislong
   unimplemented();
   NEXT(3);
 }
 OP(TUP): {
-  uint16_t tag = read_uint16_t(ip + 1);
-  uint16_t count = read_uint16_t(ip + 3);
+  uint16_t tag = read_uint16_t(reg.ip + 1);
+  uint16_t count = read_uint16_t(reg.ip + 3);
+  // TODO: Implement tup
   unimplemented();
   NEXT(5);
 }
 OP(PUSHTAG): {
-  uint16_t off = read_uint16_t(ip + 1);
+  uint16_t off = read_uint16_t(reg.ip + 1);
+  // TODO: Implement pushtag
   unimplemented();
   NEXT(3);
 }
 OP(PUSHLEN): {
-  uint16_t off = read_uint16_t(ip + 1);
+  uint16_t off = read_uint16_t(reg.ip + 1);
+  // TODO: Implement pushlen
   unimplemented();
   NEXT(3);
 }
 OP(PUSHELEM): {
-  uint16_t off = read_uint16_t(ip + 1);
-  uint16_t index = read_uint16_t(ip + 3);
+  uint16_t off = read_uint16_t(reg.ip + 1);
+  uint16_t index = read_uint16_t(reg.ip + 3);
+  // TODO: Implement pushelem
   unimplemented();
   NEXT(5);
 }
 OP(LONG): {
-  uint32_t bytes_len = read_uint32_t(ip + 1);
-  uint8_t* bytes = (uint8_t*)(ip + 5);
+  uint32_t bytes_len = read_uint32_t(reg.ip + 1);
+  uint8_t* bytes = (uint8_t*)(reg.ip + 5);
   // Use read_uint8_t(&bytes + IDX) to get elements
+  // TODO: Implement long
   unimplemented();
   NEXT(5 + bytes_len * sizeof(uint8_t));
 }
 OP(POPSETBYTE): {
-  uint16_t off = read_uint16_t(ip + 1);
+  uint16_t off = read_uint16_t(reg.ip + 1);
+  // TODO: Implement popsetbyte
   unimplemented();
   NEXT(3);
 }
 OP(PUSHLONGLEN): {
-  uint16_t off = read_uint16_t(ip + 1);
+  uint16_t off = read_uint16_t(reg.ip + 1);
+  // TODO: Implement pushlonglen
   unimplemented();
   NEXT(3);
 }
 OP(PUSHBYTE): {
-  uint16_t off = read_uint16_t(ip + 1);
+  uint16_t off = read_uint16_t(reg.ip + 1);
+  // TODO: Implement pushbyte
   unimplemented();
   NEXT(3);
 }
 OP(JOIN): {
+  // TODO: Implement join
   unimplemented();
   NEXT(1);
 }
 OP(SUBLONG): {
+  // TODO: Implement sublong
   unimplemented();
   NEXT(1);
 }
 OP(LONGCMP): {
+  // TODO: Implement longcmp
   unimplemented();
   NEXT(1);
 }
 OP(APP): {
-  uint16_t count = read_uint16_t(ip + 1);
+  uint16_t count = read_uint16_t(reg.ip + 1);
+  // TODO: Implement app
   unimplemented();
   NEXT(3);
 }
 OP(RET): {
-  uint16_t off = read_uint16_t(ip + 1);
+  uint16_t off = read_uint16_t(reg.ip + 1);
+  // TODO: Implement ret
   unimplemented();
   NEXT(3);
 }
 OP(RETAPP): {
-  uint16_t count = read_uint16_t(ip + 1);
+  uint16_t count = read_uint16_t(reg.ip + 1);
+  // TODO: Implement retapp
   unimplemented();
   NEXT(3);
 }
 OP(INTADD): {
+  // TODO: Implement intadd
   unimplemented();
   NEXT(1);
 }
 OP(INTSUB): {
+  // TODO: Implement intsub
   unimplemented();
   NEXT(1);
 }
 OP(INTMUL): {
+  // TODO: Implement intmul
   unimplemented();
   NEXT(1);
 }
 OP(UINTMUL): {
+  // TODO: Implement uintmul
   unimplemented();
   NEXT(1);
 }
 OP(INTDIV): {
+  // TODO: Implement intdiv
   unimplemented();
   NEXT(1);
 }
 OP(UINTDIV): {
+  // TODO: Implement uintdiv
   unimplemented();
   NEXT(1);
 }
 OP(INTMOD): {
+  // TODO: Implement intmod
   unimplemented();
   NEXT(1);
 }
 OP(UINTMOD): {
+  // TODO: Implement uintmod
   unimplemented();
   NEXT(1);
 }
 OP(INTUNM): {
+  // TODO: Implement intunm
   unimplemented();
   NEXT(1);
 }
 OP(INTSHL): {
+  // TODO: Implement intshl
   unimplemented();
   NEXT(1);
 }
 OP(INTSHR): {
+  // TODO: Implement intshr
   unimplemented();
   NEXT(1);
 }
 OP(UINTSHR): {
+  // TODO: Implement uintshr
   unimplemented();
   NEXT(1);
 }
 OP(INTAND): {
+  // TODO: Implement intand
   unimplemented();
   NEXT(1);
 }
 OP(INTOR): {
+  // TODO: Implement intor
   unimplemented();
   NEXT(1);
 }
 OP(INTXOR): {
+  // TODO: Implement intxor
   unimplemented();
   NEXT(1);
 }
 OP(INTNEG): {
+  // TODO: Implement intneg
   unimplemented();
   NEXT(1);
 }
 OP(INTLT): {
+  // TODO: Implement intlt
   unimplemented();
   NEXT(1);
 }
 OP(INTLE): {
+  // TODO: Implement intle
   unimplemented();
   NEXT(1);
 }
 OP(FLOATADD): {
+  // TODO: Implement floatadd
   unimplemented();
   NEXT(1);
 }
 OP(FLOATSUB): {
+  // TODO: Implement floatsub
   unimplemented();
   NEXT(1);
 }
 OP(FLOATMUL): {
+  // TODO: Implement floatmul
   unimplemented();
   NEXT(1);
 }
 OP(FLOATDIV): {
+  // TODO: Implement floatdiv
   unimplemented();
   NEXT(1);
 }
 OP(FLOATUNM): {
+  // TODO: Implement floatunm
   unimplemented();
   NEXT(1);
 }
 OP(FLOATLT): {
+  // TODO: Implement floatlt
   unimplemented();
   NEXT(1);
 }
 OP(FLOATLE): {
+  // TODO: Implement floatle
   unimplemented();
   NEXT(1);
 }
 OP(EQ): {
+  // TODO: Implement eq
   unimplemented();
   NEXT(1);
 }
 OP(NE): {
+  // TODO: Implement ne
   unimplemented();
   NEXT(1);
 }
 OP(JMP): {
-  int32_t off = read_int32_t(ip + 1);
+  int32_t off = read_int32_t(reg.ip + 1);
+  // TODO: Implement jmp
   unimplemented();
   NEXT(5);
 }
 OP(BEZ): {
-  int16_t off = read_int16_t(ip + 1);
+  int16_t off = read_int16_t(reg.ip + 1);
+  // TODO: Implement bez
   unimplemented();
   NEXT(3);
 }
 OP(BNE): {
-  int16_t off = read_int16_t(ip + 1);
+  int16_t off = read_int16_t(reg.ip + 1);
+  // TODO: Implement bne
   unimplemented();
   NEXT(3);
 }
 OP(BTAG): {
-  uint16_t tag = read_uint16_t(ip + 1);
-  int16_t off = read_int16_t(ip + 3);
+  uint16_t tag = read_uint16_t(reg.ip + 1);
+  int16_t off = read_int16_t(reg.ip + 3);
+  // TODO: Implement btag
   unimplemented();
   NEXT(5);
 }
 OP(JTAG): {
-  uint32_t jump_table_len = read_uint32_t(ip + 1);
-  int32_t* jump_table = (int32_t*)(ip + 5);
+  uint32_t jump_table_len = read_uint32_t(reg.ip + 1);
+  int32_t* jump_table = (int32_t*)(reg.ip + 5);
   // Use read_int32_t(&jump_table + IDX) to get elements
+  // TODO: Implement jtag
   unimplemented();
   NEXT(5 + jump_table_len * sizeof(int32_t));
 }
 OP(MAGIC): {
   // Handle magic
-  switch(read_uint16_t(ip + 1)) {
+  switch(read_uint16_t(reg.ip + 1)) {
   case SSM_MAGIC_NOP: {
     // nop
     unimplemented();
@@ -568,20 +623,23 @@ OP(MAGIC): {
     unimplemented();
   } break;
   }
+  // TODO: Implement magic
   unimplemented();
   NEXT(1);
 }
 OP(XFN): {
-  uint16_t argc = read_uint16_t(ip + 1);
-  uint16_t stack_size = read_uint16_t(ip + 3);
+  uint16_t argc = read_uint16_t(reg.ip + 1);
+  uint16_t stack_size = read_uint16_t(reg.ip + 3);
+  // TODO: Implement xfn
   unimplemented();
   NEXT(5);
 }
 OP(HEADER): {
-  uint32_t version = read_uint32_t(ip + 1);
-  uint32_t chunk_size = read_uint32_t(ip + 5);
-  uint32_t global_offset = read_uint32_t(ip + 9);
-  uint32_t global_count = read_uint32_t(ip + 13);
+  uint32_t version = read_uint32_t(reg.ip + 1);
+  uint32_t chunk_size = read_uint32_t(reg.ip + 5);
+  uint32_t global_offset = read_uint32_t(reg.ip + 9);
+  uint32_t global_count = read_uint32_t(reg.ip + 13);
+  // TODO: Implement header
   unimplemented();
   NEXT(17);
 }
