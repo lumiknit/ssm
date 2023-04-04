@@ -138,4 +138,9 @@
 
 #endif
 
+
+// Opcodes
+
+#include "ssm_ops.h"
+
 #endif

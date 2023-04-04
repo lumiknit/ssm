@@ -240,10 +240,6 @@ ssmT ssmNewTup(ssmMem *mem, ssmV tag, ssmV words);
 
 void ssmGCWriteBarrier(ssmMem *mem, ssmT tup);
 
-// Bytecode
-
-#include <ssm_ops.h>
-
 // VM
 
 typedef struct ssmConfig {
@@ -266,6 +262,6 @@ void ssmInitVM(ssmVM* vm, ssmConfig* config);
 void ssmFiniVM(ssmVM* vm);
 
 int ssmLoadFile(ssmVM *vm, const char *filename);
-int ssmLoadString(ssmVM *vm, size_t size, const ssmOp *code);
+int ssmLoadString(ssmVM *vm, size_t size, const uint8_t *code);
 
 #endif
