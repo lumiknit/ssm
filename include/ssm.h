@@ -8,6 +8,11 @@
 #ifndef __SSM_H__
 #define __SSM_H__
 
+// Info
+#define SSM_NAME "ssm"
+#define SSM_COPYRIGHT "Copyright (c) 2023 lumiknit"
+#define SSM_VERSION "0.0.1"
+
 // Include standard libraries
 
 #include <stdint.h>
