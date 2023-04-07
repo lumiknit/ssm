@@ -206,7 +206,7 @@ case SSM_OP_BTAG: {
 case SSM_OP_JTAG: {
   uint32_t jump_table_len = read_uint32_t(&c->bytes[i + 1]);
   for(size_t jump_table_i = 0; jump_table_i < jump_table_len; jump_table_i++) {
-    int32_t jump_table_elem = read_int32_t(&c->bytes[i + 1 + jump_table_i * sizeof(int32_t)]);
+    int32_t jump_table_elem = read_int32_t(&c->bytes[i + 1 + 4 + jump_table_i * sizeof(int32_t)]);
   if(i + jump_table_elem < 0 || i + jump_table_elem >= c->size)
     goto L_err_offset;
   mark[i + jump_table_elem] |= M_JMP_TARGET;

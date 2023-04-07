@@ -207,6 +207,11 @@ def refine_lines lines
           end
           # If magic is valid, convert to magic index
           v = m.index
+        elsif arg.type.type.kind == "offset"
+          # In this case, we need labels
+          unless v.is_a? String
+            raise "Failed to refine:\n#{line[:filename]}:#{line[:line]}: #{arg.name} requires labels, but got #{v}"
+          end
         else
           # val's type must be same as arg's type
           begin

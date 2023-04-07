@@ -75,7 +75,7 @@ static const char* verifyChunk(ssmVM *vm, Chunk *c) {
 
   // Check header
   OpHeader hd;
-  if(!readOpHeader(&hd, c->bytes)) {
+  if(readOpHeader(&hd, c->bytes) == 0) {
     ret = "SSMVeriCh: cannot read header";
     goto L_ret;
   }
@@ -112,7 +112,7 @@ static const char* verifyChunk(ssmVM *vm, Chunk *c) {
   }
 
   // Check by marks
-  for(size_t i = 0; i < c->size;) {
+  for(size_t i = 0; i < c->size; i++) {
     // Jump target must be an opcode
     if(mark[i] & M_JMP_TARGET && !(mark[i] & M_OP)) {
       ret = "SSMVeriCh: jump target is not an opcode";
@@ -205,9 +205,16 @@ int ssmLoadFile(ssmVM *vm, const char *filename) {
   fseek(file, 0, SEEK_END);
   size_t size = ftell(file);
   rewind(file);
+  
+  // Align size
+  size_t a_size = (size + sizeof(Chunk) + SSM_WORD_SIZE - 1) & ~(SSM_WORD_SIZE - 1);
+  if(a_size <= size) {
+    // Overflow
+    return -1;
+  }
 
   // Allocate Chunk
-  Chunk *c = aligned_alloc(SSM_WORD_SIZE, sizeof(Chunk) + size);
+  Chunk *c = aligned_alloc(SSM_WORD_SIZE, a_size);
   c->next = NULL;
   c->size = size;
   fread(c->bytes, 1, size, file);
@@ -217,8 +224,15 @@ int ssmLoadFile(ssmVM *vm, const char *filename) {
 }
 
 int ssmLoadString(ssmVM *vm, size_t size, const ssmOp *code) {
+  // Align size
+  size_t a_size = (size + sizeof(Chunk) + SSM_WORD_SIZE - 1) & ~(SSM_WORD_SIZE - 1);
+  if(a_size <= size) {
+    // Overflow
+    return -1;
+  }
+
   // Allocate code
-  Chunk *c = aligned_alloc(SSM_WORD_SIZE, sizeof(Chunk) + size);
+  Chunk *c = aligned_alloc(SSM_WORD_SIZE, a_size);
   c->next = NULL;
   c->size = size;
   memcpy(c->bytes, code, size);

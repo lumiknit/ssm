@@ -136,7 +136,7 @@ def gen_verify_loop
         if elem_type.kind == "offset"
           body << "for(size_t #{arg.name}_i = 0; #{arg.name}_i < #{arg.name}_len; #{arg.name}_i++) {"
           body << [
-            "#{elem_type.ctype} #{arg.name}_elem = read_#{elem_type.ctype}(&c->bytes[i + #{p} + #{arg.name}_i * sizeof(#{elem_type.ctype})#{p_extra}]);",
+            "#{elem_type.ctype} #{arg.name}_elem = read_#{elem_type.ctype}(&c->bytes[i + #{p} + #{len_type.bytes} + #{arg.name}_i * sizeof(#{elem_type.ctype})#{p_extra}]);",
             "if(i + #{arg.name}_elem < 0 || i + #{arg.name}_elem >= c->size)",
             "  goto L_err_offset;",
             "mark[i + #{arg.name}_elem] |= M_JMP_TARGET;"
