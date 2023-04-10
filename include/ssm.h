@@ -19,7 +19,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
+#include <math.h>
 
 // Endianess
 #if defined(__BYTE_ORDER) && __BYTE_ORDER == __LITTLE_ENDIAN || \
@@ -157,11 +157,12 @@ typedef union ssmPtrUnion {
 
 // Tuple Helpers
 
-#define ssmTHd(t) ((ssmT)(t))[0]
-#define ssmTMarkList(t) ((ssmT*)(t))[-1]
-#define ssmTNext(t) ((ssmT*)(t))[-2]
-#define ssmTElem(t, i) ((ssmT)(t))[(i) + 1]
-#define ssmTByte(t, i) ((char*)((ssmT)(t)))[i]
+#define ssmTHd(t) (((ssmT)(t))[0])
+#define ssmTMarkList(t) (((ssmT*)(t))[-1])
+#define ssmTNext(t) (((ssmT*)(t))[-2])
+#define ssmTElem(t, i) (((ssmT)(t))[(i) + 1])
+#define ssmTFirst(t) ssmTElem(t, 0)
+#define ssmTByte(t, i) (((char*)((ssmT)(t)))[i])
 
 #define ssmTWords(words) (1 + (words))
 #define ssmTWordsFromBytes(bytes) \

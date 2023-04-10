@@ -95,35 +95,51 @@ opcodes:
     reg.sp += count;
 - name: PUSH
   args:
-  - name: off
+  - name: off_sp
     type: u16
   desc: Push [sp + off_sp]
+  c_impl: |-
+    ssmV tmp = reg.sp[off_sp];
+    *(--reg.sp) = tmp;
 - name: PUSHBP
   args:
   - name: off_bp
     type: u16
   desc: Push [bp - off_bp]
+  c_impl: |-
+    ssmV tmp = reg.bp[-off_bp];
+    *(--reg.sp) = tmp;
 - name: PUSHAP
   args:
   - name: off_ap
     type: u16
   desc: Push [ap + off_ap]
+  c_impl: |-
+    ssmV tmp = BP2AP(reg.bp)[off_ap];
+    *(--reg.sp) = tmp;
 - name: POPSET
   args:
   - name: off_sp
     type: u16
   desc: Pop and set into [sp + off_sp]
+  c_impl: |-
+    reg.sp[off_sp] = *reg.sp;
+    reg.sp++;
 # Literal
 - name: PUSHI
   args:
   - name: value
     type: i32
   desc: Push integer literal
+  c_impl: |-
+    *(--reg.sp) = ssmInt2Val(value);
 - name: PUSHF
   args:
   - name: value
     type: f32
   desc: Push float literal
+  c_impl: |-
+    *(--reg.sp) = ssmFlt2Val(value);
 # Function
 - name: PUSHFN
   args:
@@ -136,17 +152,26 @@ opcodes:
   - name: global
     type: g32
   desc: Push index-th global
+  c_impl: |-
+    *(--reg.sp) = vm->mem.global->vals[global];
 - name: POPSETGLOBAL
   args:
   - name: global
     type: g32
   desc: Pop and set into index-th global
+  c_impl: |-
+    vm->mem.global->vals[global] = *reg.sp;
+    reg.sp++;
 # Tuple
 - name: PUSHISLONG
   args:
   - name: off
     type: u16
   desc: Check [sp + off] is a long tuple.
+  c_impl: |-
+    ssmT tup = ssmVal2Tup(reg.sp[off]);
+    ssmV hd = ssmTHd(tup);
+    *(--reg.sp) = ssmInt2Val(ssmHdIsLong(hd));
 # Short tuple
 - name: TUP
   args:
@@ -155,16 +180,27 @@ opcodes:
   - name: count
     type: u16
   desc: Create a short tuple with tag and count items.
+  c_impl: |-
+    ssmT tup = ssmNewTup(&vm->mem, tag, count);
+    memcpy(&ssmTFirst(tup), reg.sp, count * sizeof(ssmV));
+    reg.sp += count;
+    *reg.sp = ssmTup2Val(tup);
 - name: PUSHTAG
   args:
   - name: off
     type: u16
   desc: Push tag of [sp + off]
+  c_impl: |-
+    ssmT tup = ssmVal2Tup(reg.sp[off]);
+    *(--reg.sp) = ssmUint2Val(ssmHdTag(ssmTHd(tup)));
 - name: PUSHLEN
   args:
   - name: off
     type: u16
   desc: Push length of [sp + off]
+  c_impl: |-
+    ssmT tup = ssmVal2Tup(reg.sp[off]);
+    *(--reg.sp) = ssmUint2Val(ssmHdShortWords(ssmTHd(tup)));
 - name: PUSHELEM
   args:
   - name: off
@@ -172,36 +208,86 @@ opcodes:
   - name: index
     type: u16
   desc: Push index-th element of [sp + off]
+  c_impl: |-
+    ssmT tup = ssmVal2Tup(reg.sp[off]);
+    *(--reg.sp) = ssmTElem(tup, index);
 # Long tuple
 - name: LONG
   args:
   - name: bytes
     type: b32
   desc: Create a long tuple with bytes.
+  c_impl: |-
+    ssmT tup = ssmNewLongTup(&vm->mem, bytes_len);
+    memcpy(&ssmTFirst(tup), bytes, bytes_len);
+    *(--reg.sp) = ssmTup2Val(tup);
 - name: POPSETBYTE
   args:
   - name: off
     type: u16
   desc: Set [sp + off][sp + 1] = [sp], then pop 2 values
+  c_impl: |-
+    ssmT tup = ssmVal2Tup(reg.sp[off]);
+    uint8_t byte = (uint8_t)ssmVal2Uint(reg.sp[0]);
+    size_t idx = (size_t)ssmVal2Uint(reg.sp[1]);
+    ssmTByte(tup, idx) = byte;
+    reg.sp += 2;
 - name: PUSHLONGLEN
   args:
   - name: off
     type: u16
   desc: Push length of [sp + off]
+  c_impl: |-
+    ssmT tup = ssmVal2Tup(reg.sp[off]);
+    *(--reg.sp) = ssmUint2Val(ssmHdLongBytes(ssmTHd(tup)));
 - name: PUSHBYTE
   args:
   - name: off
     type: u16
   desc: Set [sp] = [sp + off][sp]
+  c_impl: |-
+    ssmT tup = ssmVal2Tup(reg.sp[off]);
+    uint8_t byte = ssmTByte(tup, (size_t)ssmVal2Uint(reg.sp[0]));
+    reg.sp[off] = ssmUint2Val(byte);
 - name: JOIN
   args: []
   desc: Pop 2 values and push joined value [sp] ++ [sp + 1]
+  c_impl: |-
+    ssmT tup1 = ssmVal2Tup(reg.sp[0]);
+    ssmT tup2 = ssmVal2Tup(reg.sp[1]);
+    size_t len1 = ssmHdLongBytes(ssmTHd(tup1));
+    size_t len2 = ssmHdLongBytes(ssmTHd(tup2));
+    ssmT tup = ssmNewLongTup(&vm->mem, len1 + len2);
+    memcpy(&ssmTByte(tup, 0), &ssmTByte(tup1, 0), len1);
+    memcpy(&ssmTByte(tup, len1), &ssmTByte(tup2, 0), len2);
+    reg.sp++;
+    *reg.sp = ssmTup2Val(tup);
 - name: SUBLONG
   args: []
   desc: Pop 3 values and push [sp + 2][[sp] .. [sp + 1]]
+  c_impl: |-
+    ssmT tup = ssmVal2Tup(reg.sp[2]);
+    size_t start = (size_t)ssmVal2Uint(reg.sp[0]);
+    size_t end = (size_t)ssmVal2Uint(reg.sp[1]);
+    size_t len = end - start;
+    ssmT sub = ssmNewLongTup(&vm->mem, len);
+    memcpy(&ssmTFirst(sub), &ssmTByte(tup, start), len);
+    reg.sp += 2;
+    *reg.sp = ssmTup2Val(sub);
 - name: LONGCMP
   args: []
   desc: Pop 2 values and push [sp] <=> [sp + 1] (-1 if <, 0 if ==, 1 if >)
+  c_impl: |-
+    ssmT tup1 = ssmVal2Tup(reg.sp[0]);
+    ssmT tup2 = ssmVal2Tup(reg.sp[1]);
+    size_t len1 = ssmHdLongBytes(ssmTHd(tup1));
+    size_t len2 = ssmHdLongBytes(ssmTHd(tup2));
+    int cmp = memcmp(&ssmTFirst(tup1), &ssmTFirst(tup2), len1 < len2 ? len1 : len2);
+    if (cmp == 0) {
+      cmp = len1 < len2 ? -1 : len1 > len2 ? 1 : 0;
+    }
+    reg.sp++;
+    *reg.sp = ssmInt2Val(cmp);
 # Call
 - name: APP
   aligned: right # Return address must be aligned
@@ -224,86 +310,191 @@ opcodes:
 - name: INTADD
   args: []
   desc: Pop 2 values and push [sp] + [sp + 1]
+  c_impl: |-
+    ssmIptr a = ssmVal2Int(reg.sp[0]);
+    ssmIptr b = ssmVal2Int(reg.sp[1]);
+    *(++reg.sp) = ssmInt2Val(a + b);
 - name: INTSUB
   args: []
   desc: Pop 2 values and push [sp] - [sp + 1]
+  c_impl: |-
+    ssmIptr a = ssmVal2Int(reg.sp[0]);
+    ssmIptr b = ssmVal2Int(reg.sp[1]);
+    *(++reg.sp) = ssmInt2Val(a - b);
 - name: INTMUL
   args: []
   desc: Pop 2 values and push [sp] * [sp + 1]
+  c_impl: |-
+    ssmIptr a = ssmVal2Int(reg.sp[0]);
+    ssmIptr b = ssmVal2Int(reg.sp[1]);
+    *(++reg.sp) = ssmInt2Val(a * b);
 - name: UINTMUL
   args: []
   desc: Pop 2 values and push [sp] * [sp + 1]
+  c_impl: |-
+    ssmUptr a = ssmVal2Uint(reg.sp[0]);
+    ssmUptr b = ssmVal2Uint(reg.sp[1]);
+    *(++reg.sp) = ssmUint2Val(a * b);
 - name: INTDIV
   args: []
   desc: Pop 2 values and push [sp] / [sp + 1]
+  c_impl: |-
+    ssmIptr a = ssmVal2Int(reg.sp[0]);
+    ssmIptr b = ssmVal2Int(reg.sp[1]);
+    *(++reg.sp) = ssmInt2Val(a / b);
 - name: UINTDIV
   args: []
   desc: Pop 2 values and push [sp] / [sp + 1]
+  c_impl: |-
+    ssmUptr a = ssmVal2Uint(reg.sp[0]);
+    ssmUptr b = ssmVal2Uint(reg.sp[1]);
+    *(++reg.sp) = ssmUint2Val(a / b);
 - name: INTMOD
   args: []
   desc: Pop 2 values and push [sp] % [sp + 1]
+  c_impl: |-
+    ssmIptr a = ssmVal2Int(reg.sp[0]);
+    ssmIptr b = ssmVal2Int(reg.sp[1]);
+    *(++reg.sp) = ssmInt2Val(a % b);
 - name: UINTMOD
   args: []
   desc: Pop 2 values and push [sp] % [sp + 1]
+  c_impl: |-
+    ssmUptr a = ssmVal2Uint(reg.sp[0]);
+    ssmUptr b = ssmVal2Uint(reg.sp[1]);
+    *(++reg.sp) = ssmUint2Val(a % b);
 - name: INTUNM
   args: []
   desc: Pop 1 value and push -[sp]
+  c_impl: |-
+    ssmIptr a = ssmVal2Int(reg.sp[0]);
+    *reg.sp = ssmInt2Val(-a);
 - name: INTSHL
   args: []
   desc: Pop 2 values and push [sp] << [sp + 1]
+  c_impl: |-
+    ssmIptr a = ssmVal2Int(reg.sp[0]);
+    ssmIptr b = ssmVal2Int(reg.sp[1]);
+    *(++reg.sp) = ssmInt2Val(a << b);
 - name: INTSHR
   args: []
   desc: Pop 2 values and push [sp] >> [sp + 1]
+  c_impl: |-
+    ssmIptr a = ssmVal2Int(reg.sp[0]);
+    ssmIptr b = ssmVal2Int(reg.sp[1]);
+    *(++reg.sp) = ssmInt2Val(a >> b);
 - name: UINTSHR
   args: []
   desc: Pop 2 values and push [sp] >> [sp + 1]
+  c_impl: |-
+    ssmUptr a = ssmVal2Uint(reg.sp[0]);
+    ssmUptr b = ssmVal2Uint(reg.sp[1]);
+    *(++reg.sp) = ssmUint2Val(a >> b);
 - name: INTAND
   args: []
   desc: Pop 2 values and push [sp] & [sp + 1]
+  c_impl: |-
+    ssmIptr a = ssmVal2Int(reg.sp[0]);
+    ssmIptr b = ssmVal2Int(reg.sp[1]);
+    *(++reg.sp) = ssmInt2Val(a & b);
 - name: INTOR
   args: []
   desc: Pop 2 values and push [sp] | [sp + 1]
+  c_impl: |-
+    ssmIptr a = ssmVal2Int(reg.sp[0]);
+    ssmIptr b = ssmVal2Int(reg.sp[1]);
+    *(++reg.sp) = ssmInt2Val(a | b);
 - name: INTXOR
   args: []
   desc: Pop 2 values and push [sp] ^ [sp + 1]
+  c_impl: |-
+    ssmIptr a = ssmVal2Int(reg.sp[0]);
+    ssmIptr b = ssmVal2Int(reg.sp[1]);
+    *(++reg.sp) = ssmInt2Val(a ^ b);
 - name: INTNEG
   args: []
   desc: Pop 1 value and push ~[sp]
+  c_impl: |-
+    ssmIptr a = ssmVal2Int(reg.sp[0]);
+    *reg.sp = ssmInt2Val(~a);
 - name: INTLT
   args: []
   desc: Pop 2 values and push [sp] < [sp + 1]
+  c_impl: |-
+    ssmIptr a = ssmVal2Int(reg.sp[0]);
+    ssmIptr b = ssmVal2Int(reg.sp[1]);
+    *(++reg.sp) = ssmInt2Val(a < b);
 - name: INTLE
   args: []
   desc: Pop 2 values and push [sp] <= [sp + 1]
+  c_impl: |-
+    ssmIptr a = ssmVal2Int(reg.sp[0]);
+    ssmIptr b = ssmVal2Int(reg.sp[1]);
+    *(++reg.sp) = ssmInt2Val(a <= b);
 # Float Arithmetic
 - name: FLOATADD
   args: []
   desc: Pop 2 values and push [sp] + [sp + 1]
+  c_impl: |-
+    ssmFptr a = ssmVal2Flt(reg.sp[0]);
+    ssmFptr b = ssmVal2Flt(reg.sp[1]);
+    *(++reg.sp) = ssmFlt2Val(a + b);
 - name: FLOATSUB
   args: []
   desc: Pop 2 values and push [sp] - [sp + 1]
+  c_impl: |-
+    ssmFptr a = ssmVal2Flt(reg.sp[0]);
+    ssmFptr b = ssmVal2Flt(reg.sp[1]);
+    *(++reg.sp) = ssmFlt2Val(a - b);
 - name: FLOATMUL
   args: []
   desc: Pop 2 values and push [sp] * [sp + 1]
+  c_impl: |-
+    ssmFptr a = ssmVal2Flt(reg.sp[0]);
+    ssmFptr b = ssmVal2Flt(reg.sp[1]);
+    *(++reg.sp) = ssmFlt2Val(a * b);
 - name: FLOATDIV
   args: []
   desc: Pop 2 values and push [sp] / [sp + 1]
+  c_impl: |-
+    ssmFptr a = ssmVal2Flt(reg.sp[0]);
+    ssmFptr b = ssmVal2Flt(reg.sp[1]);
+    *(++reg.sp) = ssmFlt2Val(a / b);
 - name: FLOATUNM
   args: []
   desc: Pop 1 value and push -[sp]
+  c_impl: |-
+    ssmFptr a = ssmVal2Flt(reg.sp[0]);
+    *reg.sp = ssmFlt2Val(-a);
 - name: FLOATLT
   args: []
   desc: Pop 2 values and push [sp] < [sp + 1]
+  c_impl: |-
+    ssmFptr a = ssmVal2Flt(reg.sp[0]);
+    ssmFptr b = ssmVal2Flt(reg.sp[1]);
+    *(++reg.sp) = ssmInt2Val(a < b);
 - name: FLOATLE
   args: []
   desc: Pop 2 values and push [sp] <= [sp + 1]
+  c_impl: |-
+    ssmFptr a = ssmVal2Flt(reg.sp[0]);
+    ssmFptr b = ssmVal2Flt(reg.sp[1]);
+    *(++reg.sp) = ssmInt2Val(a <= b);
 # Comparison
 - name: EQ
   args: []
   desc: Pop 2 values and push [sp] == [sp + 1]
+  c_impl: |-
+    int cmp = ssmVal2Uint(reg.sp[0]) == ssmVal2Uint(reg.sp[1]);
+    reg.sp++;
+    *reg.sp = ssmInt2Val(cmp);
 - name: NE
   args: []
   desc: Pop 2 values and push [sp] != [sp + 1]
+  c_impl: |-
+    int cmp = ssmVal2Uint(reg.sp[0]) != ssmVal2Uint(reg.sp[1]);
+    reg.sp++;
+    *reg.sp = ssmInt2Val(cmp);
 # Branch
 - name: JMP
   args:
@@ -329,7 +520,7 @@ opcodes:
   desc: If the tag of [sp] is tag, jump to (ip + off)
 - name: JTAG
   args:
-  - name: jump_table
+  - name: jmps
     type: j32
   desc: Jump to (ip + jump_table[tag of [sp]])
 # Magic
@@ -367,6 +558,28 @@ magics:
 # Nop
 - name: NOP
   desc: No operation
+  c_impl: "// Do Nothing"
+# Debug
+- name: PTOP
+  desc: Print the top of the stack
+  c_impl: |-
+    ssmV val = *reg.sp;
+    if(ssmIsLiteral(val)) {
+      printf("PTOP: Literal 0x%zx (int=%zd, uint=%zu, flt=%f)\n",
+        val, ssmVal2Int(val), ssmVal2Uint(val), (float)ssmVal2Flt(val));
+    } else {
+      ssmT t = ssmVal2Tup(val);
+      ssmV hd = ssmTHd(t);
+      if(ssmHdIsLong(hd)) {
+        printf("PTOP: Long 0x%zx (bytes = %zu)\n      `%.*s`", val, ssmHdLongBytes(hd), (int)ssmHdLongBytes(hd), &ssmTByte(t, 0));
+      } else {
+        printf("PTOP: Short 0x%zx (words = %zu, tag = %zu)\n", val, ssmHdShortWords(hd), ssmHdTag(hd));
+        ssmUptr i;
+        for(i = 0; i < ssmHdShortWords(hd); i++) {
+          printf("      [%zu] = 0x%zx\n", i, ssmTElem(t, i));
+        }
+      }
+    }
 # VM
 - name: HALT
   desc: Pop a VM and halt it
@@ -443,37 +656,71 @@ magics:
 # System
 - name: EXIT
   desc: Pop a status and exit the VM
+  c_impl: |-
+    exit(ssmVal2Int(reg.sp[0]));
 - name: SYSTEM
   desc: Pop a string and execute the command
+  c_impl: |-
+    ssmT lng = ssmVal2Tup(reg.sp[0]);
+    ssmV hd = ssmTHd(lng);
+    size_t len = ssmHdLongBytes(hd);
+    char *buf = malloc(len + 1);
+    memcpy(buf, &ssmTByte(lng, 0), len);
+    buf[len] = 0;
+    int result = system(buf);
+    free(buf);
+    reg.sp[0] = ssmInt2Val(result);
 # Math
 - name: PI
   desc: Push PI
+  c_impl: |-
+    *(++reg.sp) = ssmFlt2Val(3.14159265358979323846);
 - name: E
   desc: Push E
+  c_impl: |-
+    *(++reg.sp) = ssmFlt2Val(2.7182818284590452354);
 - name: ABS
   desc: Pop a value and push the absolute value
+  c_impl: |-
+    reg.sp[0] = fabs(ssmVal2Flt(reg.sp[0]));
 - name: SIN
   desc: Pop a value and push the sine value
+  c_impl: |-
+    reg.sp[0] = sin(ssmVal2Flt(reg.sp[0]));
 - name: COS
   desc: Pop a value and push the cosine value
+  c_impl: |-
+    reg.sp[0] = cos(ssmVal2Flt(reg.sp[0]));
 - name: TAN
   desc: Pop a value and push the tangent value
+  c_impl: |-
+    reg.sp[0] = tan(ssmVal2Flt(reg.sp[0]));
 - name: ASIN
   desc: Pop a value and push the arc sine value
+  c_impl: |-
+    reg.sp[0] = asin(ssmVal2Flt(reg.sp[0]));
 - name: ACOS
   desc: Pop a value and push the arc cosine value
+  c_impl: |-
+    reg.sp[0] = acos(ssmVal2Flt(reg.sp[0]));
 - name: ATAN
   desc: Pop a value and push the arc tangent value
+  c_impl: |-
+    reg.sp[0] = atan(ssmVal2Flt(reg.sp[0]));
 - name: ATAN2
   desc: Pop a value, pop a value and push the arc tangent value
 - name: EXP
   desc: Pop a value and push the exponential value
+  c_impl: |-
+    reg.sp[0] = exp(ssmVal2Flt(reg.sp[0]));
 - name: LOG
   desc: Pop a value and push the natural logarithm value
+  c_impl: |-
+    reg.sp[0] = log(ssmVal2Flt(reg.sp[0]));
 - name: LOG10
   desc: Pop a value and push the base 10 logarithm value
-- name: LN
-  desc: Pop a value and push the natural logarithm value
+  c_impl: |-
+    reg.sp[0] = log10(ssmVal2Flt(reg.sp[0]));
 - name: MODF
   desc: Pop a value and push the fractional part and the integer part
 - name: POW

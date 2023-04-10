@@ -230,8 +230,12 @@ def gen_opcode_switch
         args << "switch(read_#{arg.type.type.ctype}(reg.ip + #{p}#{p_extra})) {"
         $spec.magics.each do |name, m|
           args << "case SSM_MAGIC_#{m.name.upcase}: {"
-          args << "  // #{m.name}"
-          args << "  unimplemented();"
+          if m.c_impl.nil?
+            args << "  // TODO: Implement #{m.name}"
+            args << "  unimplemented();"
+          else
+            args << m.c_impl.strip.lines.map(&:rstrip).join_lines(4)
+          end
           args << "} break;"
         end
         args << "}"
@@ -245,7 +249,7 @@ def gen_opcode_switch
     if o.c_impl.nil?
       impl = ["// TODO: Implement #{o.name}", "unimplemented();"]
     else
-      impl = o.c_impl.strip.lines
+      impl = o.c_impl.strip.lines.map(&:rstrip)
     end
     impl << "NEXT(#{p}#{p_extra});"
     body = (args + impl).join_lines 2

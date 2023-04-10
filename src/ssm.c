@@ -51,7 +51,7 @@ static void loadFromStdin(ssmVM *vm) {
     }
   }
   // Load
-  ssmLoadString(&vm, buffer, size);
+  ssmLoadString(vm, size, (uint8_t*) buffer);
   free(buffer);
 }
 

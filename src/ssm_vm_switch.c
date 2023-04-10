@@ -11,39 +11,37 @@ OP(POP): {
   NEXT(3);
 }
 OP(PUSH): {
-  uint16_t off = read_uint16_t(reg.ip + 1);
-  // TODO: Implement push
-  unimplemented();
+  uint16_t off_sp = read_uint16_t(reg.ip + 1);
+  ssmV tmp = reg.sp[off_sp];
+  *(--reg.sp) = tmp;
   NEXT(3);
 }
 OP(PUSHBP): {
   uint16_t off_bp = read_uint16_t(reg.ip + 1);
-  // TODO: Implement pushbp
-  unimplemented();
+  ssmV tmp = reg.bp[-off_bp];
+  *(--reg.sp) = tmp;
   NEXT(3);
 }
 OP(PUSHAP): {
   uint16_t off_ap = read_uint16_t(reg.ip + 1);
-  // TODO: Implement pushap
-  unimplemented();
+  ssmV tmp = BP2AP(reg.bp)[off_ap];
+  *(--reg.sp) = tmp;
   NEXT(3);
 }
 OP(POPSET): {
   uint16_t off_sp = read_uint16_t(reg.ip + 1);
-  // TODO: Implement popset
-  unimplemented();
+  reg.sp[off_sp] = *reg.sp;
+  reg.sp++;
   NEXT(3);
 }
 OP(PUSHI): {
   int32_t value = read_int32_t(reg.ip + 1);
-  // TODO: Implement pushi
-  unimplemented();
+  *(--reg.sp) = ssmInt2Val(value);
   NEXT(5);
 }
 OP(PUSHF): {
   float value = read_float(reg.ip + 1);
-  // TODO: Implement pushf
-  unimplemented();
+  *(--reg.sp) = ssmFlt2Val(value);
   NEXT(5);
 }
 OP(PUSHFN): {
@@ -54,87 +52,115 @@ OP(PUSHFN): {
 }
 OP(PUSHGLOBAL): {
   uint32_t global = read_uint32_t(reg.ip + 1);
-  // TODO: Implement pushglobal
-  unimplemented();
+  *(--reg.sp) = vm->mem.global->vals[global];
   NEXT(5);
 }
 OP(POPSETGLOBAL): {
   uint32_t global = read_uint32_t(reg.ip + 1);
-  // TODO: Implement popsetglobal
-  unimplemented();
+  vm->mem.global->vals[global] = *reg.sp;
+  reg.sp++;
   NEXT(5);
 }
 OP(PUSHISLONG): {
   uint16_t off = read_uint16_t(reg.ip + 1);
-  // TODO: Implement pushislong
-  unimplemented();
+  ssmT tup = ssmVal2Tup(reg.sp[off]);
+  ssmV hd = ssmTHd(tup);
+  *(--reg.sp) = ssmInt2Val(ssmHdIsLong(hd));
   NEXT(3);
 }
 OP(TUP): {
   uint16_t tag = read_uint16_t(reg.ip + 1);
   uint16_t count = read_uint16_t(reg.ip + 3);
-  // TODO: Implement tup
-  unimplemented();
+  ssmT tup = ssmNewTup(&vm->mem, tag, count);
+  memcpy(&ssmTFirst(tup), reg.sp, count * sizeof(ssmV));
+  reg.sp += count;
+  *reg.sp = ssmTup2Val(tup);
   NEXT(5);
 }
 OP(PUSHTAG): {
   uint16_t off = read_uint16_t(reg.ip + 1);
-  // TODO: Implement pushtag
-  unimplemented();
+  ssmT tup = ssmVal2Tup(reg.sp[off]);
+  *(--reg.sp) = ssmUint2Val(ssmHdTag(ssmTHd(tup)));
   NEXT(3);
 }
 OP(PUSHLEN): {
   uint16_t off = read_uint16_t(reg.ip + 1);
-  // TODO: Implement pushlen
-  unimplemented();
+  ssmT tup = ssmVal2Tup(reg.sp[off]);
+  *(--reg.sp) = ssmUint2Val(ssmHdShortWords(ssmTHd(tup)));
   NEXT(3);
 }
 OP(PUSHELEM): {
   uint16_t off = read_uint16_t(reg.ip + 1);
   uint16_t index = read_uint16_t(reg.ip + 3);
-  // TODO: Implement pushelem
-  unimplemented();
+  ssmT tup = ssmVal2Tup(reg.sp[off]);
+  *(--reg.sp) = ssmTElem(tup, index);
   NEXT(5);
 }
 OP(LONG): {
   uint32_t bytes_len = read_uint32_t(reg.ip + 1);
   uint8_t* bytes = (uint8_t*)(reg.ip + 5);
   // Use read_uint8_t(&bytes + IDX) to get elements
-  // TODO: Implement long
-  unimplemented();
+  ssmT tup = ssmNewLongTup(&vm->mem, bytes_len);
+  memcpy(&ssmTFirst(tup), bytes, bytes_len);
+  *(--reg.sp) = ssmTup2Val(tup);
   NEXT(5 + bytes_len * sizeof(uint8_t));
 }
 OP(POPSETBYTE): {
   uint16_t off = read_uint16_t(reg.ip + 1);
-  // TODO: Implement popsetbyte
-  unimplemented();
+  ssmT tup = ssmVal2Tup(reg.sp[off]);
+  uint8_t byte = (uint8_t)ssmVal2Uint(reg.sp[0]);
+  size_t idx = (size_t)ssmVal2Uint(reg.sp[1]);
+  ssmTByte(tup, idx) = byte;
+  reg.sp += 2;
   NEXT(3);
 }
 OP(PUSHLONGLEN): {
   uint16_t off = read_uint16_t(reg.ip + 1);
-  // TODO: Implement pushlonglen
-  unimplemented();
+  ssmT tup = ssmVal2Tup(reg.sp[off]);
+  *(--reg.sp) = ssmUint2Val(ssmHdLongBytes(ssmTHd(tup)));
   NEXT(3);
 }
 OP(PUSHBYTE): {
   uint16_t off = read_uint16_t(reg.ip + 1);
-  // TODO: Implement pushbyte
-  unimplemented();
+  ssmT tup = ssmVal2Tup(reg.sp[off]);
+  uint8_t byte = ssmTByte(tup, (size_t)ssmVal2Uint(reg.sp[0]));
+  reg.sp[off] = ssmUint2Val(byte);
   NEXT(3);
 }
 OP(JOIN): {
-  // TODO: Implement join
-  unimplemented();
+  ssmT tup1 = ssmVal2Tup(reg.sp[0]);
+  ssmT tup2 = ssmVal2Tup(reg.sp[1]);
+  size_t len1 = ssmHdLongBytes(ssmTHd(tup1));
+  size_t len2 = ssmHdLongBytes(ssmTHd(tup2));
+  ssmT tup = ssmNewLongTup(&vm->mem, len1 + len2);
+  memcpy(&ssmTByte(tup, 0), &ssmTByte(tup1, 0), len1);
+  memcpy(&ssmTByte(tup, len1), &ssmTByte(tup2, 0), len2);
+  reg.sp++;
+  *reg.sp = ssmTup2Val(tup);
   NEXT(1);
 }
 OP(SUBLONG): {
-  // TODO: Implement sublong
-  unimplemented();
+  ssmT tup = ssmVal2Tup(reg.sp[2]);
+  size_t start = (size_t)ssmVal2Uint(reg.sp[0]);
+  size_t end = (size_t)ssmVal2Uint(reg.sp[1]);
+  size_t len = end - start;
+  ssmT sub = ssmNewLongTup(&vm->mem, len);
+  memcpy(&ssmTFirst(sub), &ssmTByte(tup, start), len);
+  reg.sp += 2;
+  *reg.sp = ssmTup2Val(sub);
   NEXT(1);
 }
 OP(LONGCMP): {
-  // TODO: Implement longcmp
-  unimplemented();
+  ssmT tup1 = ssmVal2Tup(reg.sp[0]);
+  ssmT tup2 = ssmVal2Tup(reg.sp[1]);
+  size_t len1 = ssmHdLongBytes(ssmTHd(tup1));
+  size_t len2 = ssmHdLongBytes(ssmTHd(tup2));
+  int cmp = memcmp(&ssmTFirst(tup1), &ssmTFirst(tup2), len1 < len2 ? len1 : len2);
+  if (cmp == 0) {
+    cmp = len1 < len2 ? -1 : len1 > len2 ? 1 : 0;
+  }
+  reg.sp++;
+  *reg.sp = ssmInt2Val(cmp);
   NEXT(1);
 }
 OP(APP): {
@@ -156,138 +182,162 @@ OP(RETAPP): {
   NEXT(3);
 }
 OP(INTADD): {
-  // TODO: Implement intadd
-  unimplemented();
+  ssmIptr a = ssmVal2Int(reg.sp[0]);
+  ssmIptr b = ssmVal2Int(reg.sp[1]);
+  *(++reg.sp) = ssmInt2Val(a + b);
   NEXT(1);
 }
 OP(INTSUB): {
-  // TODO: Implement intsub
-  unimplemented();
+  ssmIptr a = ssmVal2Int(reg.sp[0]);
+  ssmIptr b = ssmVal2Int(reg.sp[1]);
+  *(++reg.sp) = ssmInt2Val(a - b);
   NEXT(1);
 }
 OP(INTMUL): {
-  // TODO: Implement intmul
-  unimplemented();
+  ssmIptr a = ssmVal2Int(reg.sp[0]);
+  ssmIptr b = ssmVal2Int(reg.sp[1]);
+  *(++reg.sp) = ssmInt2Val(a * b);
   NEXT(1);
 }
 OP(UINTMUL): {
-  // TODO: Implement uintmul
-  unimplemented();
+  ssmUptr a = ssmVal2Uint(reg.sp[0]);
+  ssmUptr b = ssmVal2Uint(reg.sp[1]);
+  *(++reg.sp) = ssmUint2Val(a * b);
   NEXT(1);
 }
 OP(INTDIV): {
-  // TODO: Implement intdiv
-  unimplemented();
+  ssmIptr a = ssmVal2Int(reg.sp[0]);
+  ssmIptr b = ssmVal2Int(reg.sp[1]);
+  *(++reg.sp) = ssmInt2Val(a / b);
   NEXT(1);
 }
 OP(UINTDIV): {
-  // TODO: Implement uintdiv
-  unimplemented();
+  ssmUptr a = ssmVal2Uint(reg.sp[0]);
+  ssmUptr b = ssmVal2Uint(reg.sp[1]);
+  *(++reg.sp) = ssmUint2Val(a / b);
   NEXT(1);
 }
 OP(INTMOD): {
-  // TODO: Implement intmod
-  unimplemented();
+  ssmIptr a = ssmVal2Int(reg.sp[0]);
+  ssmIptr b = ssmVal2Int(reg.sp[1]);
+  *(++reg.sp) = ssmInt2Val(a % b);
   NEXT(1);
 }
 OP(UINTMOD): {
-  // TODO: Implement uintmod
-  unimplemented();
+  ssmUptr a = ssmVal2Uint(reg.sp[0]);
+  ssmUptr b = ssmVal2Uint(reg.sp[1]);
+  *(++reg.sp) = ssmUint2Val(a % b);
   NEXT(1);
 }
 OP(INTUNM): {
-  // TODO: Implement intunm
-  unimplemented();
+  ssmIptr a = ssmVal2Int(reg.sp[0]);
+  *reg.sp = ssmInt2Val(-a);
   NEXT(1);
 }
 OP(INTSHL): {
-  // TODO: Implement intshl
-  unimplemented();
+  ssmIptr a = ssmVal2Int(reg.sp[0]);
+  ssmIptr b = ssmVal2Int(reg.sp[1]);
+  *(++reg.sp) = ssmInt2Val(a << b);
   NEXT(1);
 }
 OP(INTSHR): {
-  // TODO: Implement intshr
-  unimplemented();
+  ssmIptr a = ssmVal2Int(reg.sp[0]);
+  ssmIptr b = ssmVal2Int(reg.sp[1]);
+  *(++reg.sp) = ssmInt2Val(a >> b);
   NEXT(1);
 }
 OP(UINTSHR): {
-  // TODO: Implement uintshr
-  unimplemented();
+  ssmUptr a = ssmVal2Uint(reg.sp[0]);
+  ssmUptr b = ssmVal2Uint(reg.sp[1]);
+  *(++reg.sp) = ssmUint2Val(a >> b);
   NEXT(1);
 }
 OP(INTAND): {
-  // TODO: Implement intand
-  unimplemented();
+  ssmIptr a = ssmVal2Int(reg.sp[0]);
+  ssmIptr b = ssmVal2Int(reg.sp[1]);
+  *(++reg.sp) = ssmInt2Val(a & b);
   NEXT(1);
 }
 OP(INTOR): {
-  // TODO: Implement intor
-  unimplemented();
+  ssmIptr a = ssmVal2Int(reg.sp[0]);
+  ssmIptr b = ssmVal2Int(reg.sp[1]);
+  *(++reg.sp) = ssmInt2Val(a | b);
   NEXT(1);
 }
 OP(INTXOR): {
-  // TODO: Implement intxor
-  unimplemented();
+  ssmIptr a = ssmVal2Int(reg.sp[0]);
+  ssmIptr b = ssmVal2Int(reg.sp[1]);
+  *(++reg.sp) = ssmInt2Val(a ^ b);
   NEXT(1);
 }
 OP(INTNEG): {
-  // TODO: Implement intneg
-  unimplemented();
+  ssmIptr a = ssmVal2Int(reg.sp[0]);
+  *reg.sp = ssmInt2Val(~a);
   NEXT(1);
 }
 OP(INTLT): {
-  // TODO: Implement intlt
-  unimplemented();
+  ssmIptr a = ssmVal2Int(reg.sp[0]);
+  ssmIptr b = ssmVal2Int(reg.sp[1]);
+  *(++reg.sp) = ssmInt2Val(a < b);
   NEXT(1);
 }
 OP(INTLE): {
-  // TODO: Implement intle
-  unimplemented();
+  ssmIptr a = ssmVal2Int(reg.sp[0]);
+  ssmIptr b = ssmVal2Int(reg.sp[1]);
+  *(++reg.sp) = ssmInt2Val(a <= b);
   NEXT(1);
 }
 OP(FLOATADD): {
-  // TODO: Implement floatadd
-  unimplemented();
+  ssmFptr a = ssmVal2Flt(reg.sp[0]);
+  ssmFptr b = ssmVal2Flt(reg.sp[1]);
+  *(++reg.sp) = ssmFlt2Val(a + b);
   NEXT(1);
 }
 OP(FLOATSUB): {
-  // TODO: Implement floatsub
-  unimplemented();
+  ssmFptr a = ssmVal2Flt(reg.sp[0]);
+  ssmFptr b = ssmVal2Flt(reg.sp[1]);
+  *(++reg.sp) = ssmFlt2Val(a - b);
   NEXT(1);
 }
 OP(FLOATMUL): {
-  // TODO: Implement floatmul
-  unimplemented();
+  ssmFptr a = ssmVal2Flt(reg.sp[0]);
+  ssmFptr b = ssmVal2Flt(reg.sp[1]);
+  *(++reg.sp) = ssmFlt2Val(a * b);
   NEXT(1);
 }
 OP(FLOATDIV): {
-  // TODO: Implement floatdiv
-  unimplemented();
+  ssmFptr a = ssmVal2Flt(reg.sp[0]);
+  ssmFptr b = ssmVal2Flt(reg.sp[1]);
+  *(++reg.sp) = ssmFlt2Val(a / b);
   NEXT(1);
 }
 OP(FLOATUNM): {
-  // TODO: Implement floatunm
-  unimplemented();
+  ssmFptr a = ssmVal2Flt(reg.sp[0]);
+  *reg.sp = ssmFlt2Val(-a);
   NEXT(1);
 }
 OP(FLOATLT): {
-  // TODO: Implement floatlt
-  unimplemented();
+  ssmFptr a = ssmVal2Flt(reg.sp[0]);
+  ssmFptr b = ssmVal2Flt(reg.sp[1]);
+  *(++reg.sp) = ssmInt2Val(a < b);
   NEXT(1);
 }
 OP(FLOATLE): {
-  // TODO: Implement floatle
-  unimplemented();
+  ssmFptr a = ssmVal2Flt(reg.sp[0]);
+  ssmFptr b = ssmVal2Flt(reg.sp[1]);
+  *(++reg.sp) = ssmInt2Val(a <= b);
   NEXT(1);
 }
 OP(EQ): {
-  // TODO: Implement eq
-  unimplemented();
+  int cmp = ssmVal2Uint(reg.sp[0]) == ssmVal2Uint(reg.sp[1]);
+  reg.sp++;
+  *reg.sp = ssmInt2Val(cmp);
   NEXT(1);
 }
 OP(NE): {
-  // TODO: Implement ne
-  unimplemented();
+  int cmp = ssmVal2Uint(reg.sp[0]) != ssmVal2Uint(reg.sp[1]);
+  reg.sp++;
+  *reg.sp = ssmInt2Val(cmp);
   NEXT(1);
 }
 OP(JMP): {
@@ -316,310 +366,318 @@ OP(BTAG): {
   NEXT(5);
 }
 OP(JTAG): {
-  uint32_t jump_table_len = read_uint32_t(reg.ip + 1);
-  int32_t* jump_table = (int32_t*)(reg.ip + 5);
-  // Use read_int32_t(&jump_table + IDX) to get elements
+  uint32_t jmps_len = read_uint32_t(reg.ip + 1);
+  int32_t* jmps = (int32_t*)(reg.ip + 5);
+  // Use read_int32_t(&jmps + IDX) to get elements
   // TODO: Implement jtag
   unimplemented();
-  NEXT(5 + jump_table_len * sizeof(int32_t));
+  NEXT(5 + jmps_len * sizeof(int32_t));
 }
 OP(MAGIC): {
   // Handle magic
   switch(read_uint16_t(reg.ip + 1)) {
   case SSM_MAGIC_NOP: {
-    // nop
-    unimplemented();
+      // Do Nothing
+  } break;
+  case SSM_MAGIC_PTOP: {
+      ssmV val = *reg.sp;
+    if(ssmIsLiteral(val)) {
+      printf("PTOP: Literal 0x%zx (int=%zd, uint=%zu, flt=%f)\n",
+        val, ssmVal2Int(val), ssmVal2Uint(val), (float)ssmVal2Flt(val));
+    } else {
+      ssmT t = ssmVal2Tup(val);
+      ssmV hd = ssmTHd(t);
+      if(ssmHdIsLong(hd)) {
+        printf("PTOP: Long 0x%zx (bytes = %zu)\n      `%.*s`", val, ssmHdLongBytes(hd), (int)ssmHdLongBytes(hd), &ssmTByte(t, 0));
+      } else {
+        printf("PTOP: Short 0x%zx (words = %zu, tag = %zu)\n", val, ssmHdShortWords(hd), ssmHdTag(hd));
+        ssmUptr i;
+        for(i = 0; i < ssmHdShortWords(hd); i++) {
+          printf("      [%zu] = 0x%zx\n", i, ssmTElem(t, i));
+        }
+      }
+    }
   } break;
   case SSM_MAGIC_HALT: {
-    // halt
+    // TODO: Implement halt
     unimplemented();
   } break;
   case SSM_MAGIC_NEWVM: {
-    // newvm
+    // TODO: Implement newvm
     unimplemented();
   } break;
   case SSM_MAGIC_NEWPROCESS: {
-    // newprocess
+    // TODO: Implement newprocess
     unimplemented();
   } break;
   case SSM_MAGIC_VMSELF: {
-    // vmself
+    // TODO: Implement vmself
     unimplemented();
   } break;
   case SSM_MAGIC_VMPARENT: {
-    // vmparent
+    // TODO: Implement vmparent
     unimplemented();
   } break;
   case SSM_MAGIC_DUP: {
-    // dup
+    // TODO: Implement dup
     unimplemented();
   } break;
   case SSM_MAGIC_GLOBALC: {
-    // globalc
+    // TODO: Implement globalc
     unimplemented();
   } break;
   case SSM_MAGIC_EXECUTE: {
-    // execute
+    // TODO: Implement execute
     unimplemented();
   } break;
   case SSM_MAGIC_HALTED: {
-    // halted
+    // TODO: Implement halted
     unimplemented();
   } break;
   case SSM_MAGIC_SENDMSG: {
-    // sendmsg
+    // TODO: Implement sendmsg
     unimplemented();
   } break;
   case SSM_MAGIC_HASMSG: {
-    // hasmsg
+    // TODO: Implement hasmsg
     unimplemented();
   } break;
   case SSM_MAGIC_RECVMSG: {
-    // recvmsg
+    // TODO: Implement recvmsg
     unimplemented();
   } break;
   case SSM_MAGIC_EVAL: {
-    // eval
+    // TODO: Implement eval
     unimplemented();
   } break;
   case SSM_MAGIC_FOPEN: {
-    // fopen
+    // TODO: Implement fopen
     unimplemented();
   } break;
   case SSM_MAGIC_FCLOSE: {
-    // fclose
+    // TODO: Implement fclose
     unimplemented();
   } break;
   case SSM_MAGIC_FFLUSH: {
-    // fflush
+    // TODO: Implement fflush
     unimplemented();
   } break;
   case SSM_MAGIC_FREAD: {
-    // fread
+    // TODO: Implement fread
     unimplemented();
   } break;
   case SSM_MAGIC_FWRITE: {
-    // fwrite
+    // TODO: Implement fwrite
     unimplemented();
   } break;
   case SSM_MAGIC_FTELL: {
-    // ftell
+    // TODO: Implement ftell
     unimplemented();
   } break;
   case SSM_MAGIC_FSEEK: {
-    // fseek
+    // TODO: Implement fseek
     unimplemented();
   } break;
   case SSM_MAGIC_FEOF: {
-    // feof
+    // TODO: Implement feof
     unimplemented();
   } break;
   case SSM_MAGIC_STDREAD: {
-    // stdread
+    // TODO: Implement stdread
     unimplemented();
   } break;
   case SSM_MAGIC_STDWRITE: {
-    // stdwrite
+    // TODO: Implement stdwrite
     unimplemented();
   } break;
   case SSM_MAGIC_STDERROR: {
-    // stderror
+    // TODO: Implement stderror
     unimplemented();
   } break;
   case SSM_MAGIC_REMOVE: {
-    // remove
+    // TODO: Implement remove
     unimplemented();
   } break;
   case SSM_MAGIC_RENAME: {
-    // rename
+    // TODO: Implement rename
     unimplemented();
   } break;
   case SSM_MAGIC_TMPFILE: {
-    // tmpfile
+    // TODO: Implement tmpfile
     unimplemented();
   } break;
   case SSM_MAGIC_READFILE: {
-    // readfile
+    // TODO: Implement readfile
     unimplemented();
   } break;
   case SSM_MAGIC_WRITEFILE: {
-    // writefile
+    // TODO: Implement writefile
     unimplemented();
   } break;
   case SSM_MAGIC_MALLOC: {
-    // malloc
+    // TODO: Implement malloc
     unimplemented();
   } break;
   case SSM_MAGIC_FREE: {
-    // free
+    // TODO: Implement free
     unimplemented();
   } break;
   case SSM_MAGIC_SRAND: {
-    // srand
+    // TODO: Implement srand
     unimplemented();
   } break;
   case SSM_MAGIC_RAND: {
-    // rand
+    // TODO: Implement rand
     unimplemented();
   } break;
   case SSM_MAGIC_ARG: {
-    // arg
+    // TODO: Implement arg
     unimplemented();
   } break;
   case SSM_MAGIC_ENV: {
-    // env
+    // TODO: Implement env
     unimplemented();
   } break;
   case SSM_MAGIC_EXIT: {
-    // exit
-    unimplemented();
+      exit(ssmVal2Int(reg.sp[0]));
   } break;
   case SSM_MAGIC_SYSTEM: {
-    // system
-    unimplemented();
+      ssmT lng = ssmVal2Tup(reg.sp[0]);
+    ssmV hd = ssmTHd(lng);
+    size_t len = ssmHdLongBytes(hd);
+    char *buf = malloc(len + 1);
+    memcpy(buf, &ssmTByte(lng, 0), len);
+    buf[len] = 0;
+    int result = system(buf);
+    free(buf);
+    reg.sp[0] = ssmInt2Val(result);
   } break;
   case SSM_MAGIC_PI: {
-    // pi
-    unimplemented();
+      *(++reg.sp) = ssmFlt2Val(3.14159265358979323846);
   } break;
   case SSM_MAGIC_E: {
-    // e
-    unimplemented();
+      *(++reg.sp) = ssmFlt2Val(2.7182818284590452354);
   } break;
   case SSM_MAGIC_ABS: {
-    // abs
-    unimplemented();
+      reg.sp[0] = fabs(ssmVal2Flt(reg.sp[0]));
   } break;
   case SSM_MAGIC_SIN: {
-    // sin
-    unimplemented();
+      reg.sp[0] = sin(ssmVal2Flt(reg.sp[0]));
   } break;
   case SSM_MAGIC_COS: {
-    // cos
-    unimplemented();
+      reg.sp[0] = cos(ssmVal2Flt(reg.sp[0]));
   } break;
   case SSM_MAGIC_TAN: {
-    // tan
-    unimplemented();
+      reg.sp[0] = tan(ssmVal2Flt(reg.sp[0]));
   } break;
   case SSM_MAGIC_ASIN: {
-    // asin
-    unimplemented();
+      reg.sp[0] = asin(ssmVal2Flt(reg.sp[0]));
   } break;
   case SSM_MAGIC_ACOS: {
-    // acos
-    unimplemented();
+      reg.sp[0] = acos(ssmVal2Flt(reg.sp[0]));
   } break;
   case SSM_MAGIC_ATAN: {
-    // atan
-    unimplemented();
+      reg.sp[0] = atan(ssmVal2Flt(reg.sp[0]));
   } break;
   case SSM_MAGIC_ATAN2: {
-    // atan2
+    // TODO: Implement atan2
     unimplemented();
   } break;
   case SSM_MAGIC_EXP: {
-    // exp
-    unimplemented();
+      reg.sp[0] = exp(ssmVal2Flt(reg.sp[0]));
   } break;
   case SSM_MAGIC_LOG: {
-    // log
-    unimplemented();
+      reg.sp[0] = log(ssmVal2Flt(reg.sp[0]));
   } break;
   case SSM_MAGIC_LOG10: {
-    // log10
-    unimplemented();
-  } break;
-  case SSM_MAGIC_LN: {
-    // ln
-    unimplemented();
+      reg.sp[0] = log10(ssmVal2Flt(reg.sp[0]));
   } break;
   case SSM_MAGIC_MODF: {
-    // modf
+    // TODO: Implement modf
     unimplemented();
   } break;
   case SSM_MAGIC_POW: {
-    // pow
+    // TODO: Implement pow
     unimplemented();
   } break;
   case SSM_MAGIC_SQRT: {
-    // sqrt
+    // TODO: Implement sqrt
     unimplemented();
   } break;
   case SSM_MAGIC_CEIL: {
-    // ceil
+    // TODO: Implement ceil
     unimplemented();
   } break;
   case SSM_MAGIC_FLOOR: {
-    // floor
+    // TODO: Implement floor
     unimplemented();
   } break;
   case SSM_MAGIC_FABS: {
-    // fabs
+    // TODO: Implement fabs
     unimplemented();
   } break;
   case SSM_MAGIC_FMOD: {
-    // fmod
+    // TODO: Implement fmod
     unimplemented();
   } break;
   case SSM_MAGIC_CLOCK: {
-    // clock
+    // TODO: Implement clock
     unimplemented();
   } break;
   case SSM_MAGIC_TIME: {
-    // time
+    // TODO: Implement time
     unimplemented();
   } break;
   case SSM_MAGIC_CWD: {
-    // cwd
+    // TODO: Implement cwd
     unimplemented();
   } break;
   case SSM_MAGIC_ISDIR: {
-    // isdir
+    // TODO: Implement isdir
     unimplemented();
   } break;
   case SSM_MAGIC_ISFILE: {
-    // isfile
+    // TODO: Implement isfile
     unimplemented();
   } break;
   case SSM_MAGIC_MKDIR: {
-    // mkdir
+    // TODO: Implement mkdir
     unimplemented();
   } break;
   case SSM_MAGIC_RMDIR: {
-    // rmdir
+    // TODO: Implement rmdir
     unimplemented();
   } break;
   case SSM_MAGIC_CHDIR: {
-    // chdir
+    // TODO: Implement chdir
     unimplemented();
   } break;
   case SSM_MAGIC_FILES: {
-    // files
+    // TODO: Implement files
     unimplemented();
   } break;
   case SSM_MAGIC_JOINPATH: {
-    // joinpath
+    // TODO: Implement joinpath
     unimplemented();
   } break;
   case SSM_MAGIC_FFILOAD: {
-    // ffiload
+    // TODO: Implement ffiload
     unimplemented();
   } break;
   case SSM_MAGIC_OS: {
-    // os
+    // TODO: Implement os
     unimplemented();
   } break;
   case SSM_MAGIC_ARCH: {
-    // arch
+    // TODO: Implement arch
     unimplemented();
   } break;
   case SSM_MAGIC_ENDIAN: {
-    // endian
+    // TODO: Implement endian
     unimplemented();
   } break;
   case SSM_MAGIC_VERSION: {
-    // version
+    // TODO: Implement version
     unimplemented();
   } break;
   }

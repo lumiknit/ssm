@@ -251,12 +251,14 @@ static int ssmLoadChunk(ssmVM *vm, Chunk *c) {
   }
 
   // Run via VM
-  ssmRunVM(vm, c);
+  return ssmRunVM(vm, c);
 }
 
 #define THREADED_CODE
 
 // --- VM Interpreter BEGIN ---
+
+#define BP2AP(bp) ((bp) + sizeof(ssmReg) / sizeof(void*))
 
 static int ssmRunVM(ssmVM* vm, Chunk *c) {
   // Initialize
