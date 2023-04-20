@@ -9,13 +9,49 @@ module SSM
 
   # --- Argument Spec
 
+  def type_kind_data
+    
+  end
+
   # Raw Type (Int, Uint, Float)
   class NumType
     attr_reader :bytes, :kind, :pack_directive, :asm, :ctype
+
+    @@type_kinds = {
+      "int" => {
+        name: "IntNumType",
+        sized: {
+          1 => { directive: "c", asm: "i8", ctype: "int8_t" },
+          2 => { directive: "s<", asm: "i16", ctype: "int16_t" },
+          4 => { directive: "l<", asm: "i32", ctype: "int32_t" },
+          8 => { directive: "q<", asm: "i64", ctype: "int64_t" }
+        }
+      },
+      "uint" => {
+        name: "UintNumType",
+        sized: {
+          1 => { directive: "C", asm: "u8", ctype: "uint8_t" },
+          2 => { directive: "S<", asm: "u16", ctype: "uint16_t" },
+          4 => { directive: "L<", asm: "u32", ctype: "uint32_t" },
+          8 => { directive: "Q<", asm: "u64", ctype: "uint64_t" }
+        }
+      },
+      "float" => {
+        name: "FloatNumType",
+        sized: {
+          4 => { directive: "e", asm: "f32", ctype: "float" },
+          8 => { directive: "E", asm: "f64", ctype: "double" }
+        }
+      }
+    }
+    @@type_kinds["offset"] = @@type_kinds["int"]
+    @@type_kinds["global"] = @@type_kinds["uint"]
+    @@type_kinds["magic"] = @@type_kinds["uint"]
     
-    def initialize bytes, kind, pack_directive, asm, ctype
+    def initialize bytes, kind, kind_name, pack_directive, asm, ctype
       @bytes = bytes
       @kind = kind
+      @kind_name = kind_name
       @pack_directive = pack_directive
       @asm = asm
       @ctype = ctype
@@ -31,45 +67,33 @@ module SSM
       b = hash["bytes"]
       raise "Expect String for type" unless t.is_a? String
       raise "Expect Integer for bytes" unless b.is_a? Integer
-      case t
-      when "int", "offset"
-        directives = {1 => "c", 2 => "s<", 4 => "l<", 8 => "q<"}
-        pack = directives[b]
-        raise "Invalid size for IntRawType" unless pack
-        new b, t, pack, "i#{8 * b}", "int#{8 * b}_t"
-      when "uint", "magic"
-        directives = {1 => "C", 2 => "S<", 4 => "L<", 8 => "Q<"}
-        pack = directives[b]
-        raise "Invalid size for IntRawType" unless pack
-        new b, t, pack, "u#{8 * b}", "uint#{8 * b}_t"
-      when "float"
-        directives = {4 => "e", 8 => "E"}
-        pack = directives[b]
-        raise "Invalid size for IntRawType" unless pack
-        new b, t, pack, "f#{8 * b}", "float#{8 * b}_t"
-      else
-        raise "Unknown type #{t} and bytes #{b}"
-      end
+
+      tk = @@type_kinds[t]
+      raise "Unknown type kind #{t}" if tk.nil?
+      s = tk[:sized][b]
+      raise "Invalid size #{b} bytes for #{tk[:name]}" if s.nil?
+
+      new b, t, tk[:name], s[:directive], s[:asm], s[:ctype]
     end
 
     def check_val val
-      case @kind
-      when "int"
+      case @kind_name
+      when "IntNumType"
         # Check class
-        raise "Expect Integer for IntRawType" unless val.is_a? Integer
+        raise "Expect Integer for IntNumType" unless val.is_a? Integer
         # Check range
         max = 2 ** (8 * @bytes - 1) - 1
         min = -2 ** (8 * @bytes - 1)
         raise "Value #{val} out of range #{min}..#{max}" unless min <= val && val <= max
-      when "uint"
+      when "UintNumType"
         # Check class
-        raise "Expect Integer for UintRawType" unless val.is_a? Integer
+        raise "Expect Integer for UintNumType" unless val.is_a? Integer
         # Check range
         max = 2 ** (8 * @bytes) - 1
         min = 0
         raise "Value #{val} out of range #{min}..#{max}" unless min <= val && val <= max
-      when "float"
-        raise "Expect Float for FloatRawType" unless val.is_a? Float
+      when "FloatNumType"
+        raise "Expect Float for FloatNumType" unless val.is_a? Float
       end
     end
   end
@@ -188,6 +212,7 @@ module SSM
 
   class Op
     attr_reader :index, :name, :args, :desc
+    attr_accessor :aligned, :c_impl
 
     def initialize index, name, args, desc
       @index = index
@@ -207,7 +232,10 @@ module SSM
       args = args.map do |arg|
         Arg.from_hash types, arg
       end
-      Op.new index, name, args, desc
+      op = Op.new index, name, args, desc
+      op.c_impl = hash["c_impl"] if hash.has_key? "c_impl"
+      op.aligned = hash["aligned"] if hash.has_key? "aligned"
+      op
     end
     
     def to_s
@@ -219,6 +247,7 @@ module SSM
 
   class Magic
     attr_reader :index, :name, :desc
+    attr_accessor :c_impl
 
     def initialize index, name, desc
       @index = index
@@ -233,7 +262,9 @@ module SSM
       desc = hash["desc"]
       raise "Expect String for name" unless name.is_a? String
       raise "Expect String for desc" unless desc.is_a? String
-      Magic.new index, name, desc
+      mg = Magic.new index, name, desc
+      mg.c_impl = hash["c_impl"] if hash.has_key? "c_impl"
+      mg
     end
     
     def to_s

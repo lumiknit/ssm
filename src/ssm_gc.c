@@ -33,7 +33,7 @@
  */
 
 
-#include <ssm_rt.h>
+#include <ssm.h>
 #include <ssm_i.h>
 
 // -- Initialization / Finalization

@@ -5,7 +5,7 @@
  * @copyright This file is part of ssm.
  */
 
-#include <ssm_rt.h>
+#include <ssm.h>
 #include <ssm_i.h>
 
 ssmStack* ssmNewStack(size_t size, int r2l) {
@@ -16,6 +16,7 @@ ssmStack* ssmNewStack(size_t size, int r2l) {
   }
   stack->size = size;
   stack->top = r2l ? size : 0;
+  stack->vals_hi = stack->vals + size;
   return stack;
 }
 
@@ -26,6 +27,7 @@ ssmStack* ssmExtendStackToRight(ssmStack* stack, size_t size) {
     panicf("Failed to alloc stack of size %zu", size);
   }
   stack->size = size;
+  stack->vals_hi = stack->vals + size;
   return stack;
 }
 

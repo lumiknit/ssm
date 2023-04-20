@@ -28,16 +28,22 @@ case SSM_OP_PUSHF: {
   i += 5;
 } break;
 case SSM_OP_PUSHFN: {
-  register int32_t fn_off = read_int32_t(&c->ops[i + 1]);
-  if(i + fn_off < 0 || i + fn_off >= c->n_code)
+  int32_t fn_off = read_int32_t(&c->bytes[i + 1]);
+  if(i + fn_off < 0 || i + fn_off >= c->size)
     goto L_err_offset;
-  mark[i + fn_off] |= M_PUSH_FN;
+  mark[i + fn_off] |= M_FN_TARGET;
   i += 5;
 } break;
 case SSM_OP_PUSHGLOBAL: {
+  uint32_t global = read_uint32_t(&c->bytes[i + 1]);
+  if(global >= n_globals)
+    goto L_err_global;
   i += 5;
 } break;
 case SSM_OP_POPSETGLOBAL: {
+  uint32_t global = read_uint32_t(&c->bytes[i + 1]);
+  if(global >= n_globals)
+    goto L_err_global;
   i += 5;
 } break;
 case SSM_OP_PUSHISLONG: {
@@ -56,7 +62,7 @@ case SSM_OP_PUSHELEM: {
   i += 5;
 } break;
 case SSM_OP_LONG: {
-  register uint32_t bytes_len = read_uint32_t(&c->ops[i + 1]);
+  uint32_t bytes_len = read_uint32_t(&c->bytes[i + 1]);
   i += 5 + bytes_len * sizeof(uint8_t);
 } break;
 case SSM_OP_POPSETBYTE: {
@@ -79,12 +85,14 @@ case SSM_OP_LONGCMP: {
 } break;
 case SSM_OP_APP: {
   i += 3;
+  if(i % 2 != 0) goto L_err_right_aligned;
 } break;
 case SSM_OP_RET: {
   i += 3;
 } break;
 case SSM_OP_RETAPP: {
   i += 3;
+  if(i % 2 != 0) goto L_err_right_aligned;
 } break;
 case SSM_OP_INTADD: {
   i += 1;
@@ -168,51 +176,52 @@ case SSM_OP_NE: {
   i += 1;
 } break;
 case SSM_OP_JMP: {
-  register int32_t off = read_int32_t(&c->ops[i + 1]);
-  if(i + off < 0 || i + off >= c->n_code)
+  int32_t off = read_int32_t(&c->bytes[i + 1]);
+  if(i + off < 0 || i + off >= c->size)
     goto L_err_offset;
   mark[i + off] |= M_JMP_TARGET;
   i += 5;
 } break;
 case SSM_OP_BEZ: {
-  register int16_t off = read_int16_t(&c->ops[i + 1]);
-  if(i + off < 0 || i + off >= c->n_code)
+  int16_t off = read_int16_t(&c->bytes[i + 1]);
+  if(i + off < 0 || i + off >= c->size)
     goto L_err_offset;
   mark[i + off] |= M_JMP_TARGET;
   i += 3;
 } break;
 case SSM_OP_BNE: {
-  register int16_t off = read_int16_t(&c->ops[i + 1]);
-  if(i + off < 0 || i + off >= c->n_code)
+  int16_t off = read_int16_t(&c->bytes[i + 1]);
+  if(i + off < 0 || i + off >= c->size)
     goto L_err_offset;
   mark[i + off] |= M_JMP_TARGET;
   i += 3;
 } break;
 case SSM_OP_BTAG: {
-  register int16_t off = read_int16_t(&c->ops[i + 3]);
-  if(i + off < 0 || i + off >= c->n_code)
+  int16_t off = read_int16_t(&c->bytes[i + 3]);
+  if(i + off < 0 || i + off >= c->size)
     goto L_err_offset;
   mark[i + off] |= M_JMP_TARGET;
   i += 5;
 } break;
 case SSM_OP_JTAG: {
-  register uint32_t jump_table_len = read_uint32_t(&c->ops[i + 1]);
-  for(int jump_table_i = 0; jump_table_i < jump_table_len; jump_table_i++) {
-    register int32_t jump_table_elem = read_int32_t(&c->ops[i + 1 + jump_table_i * sizeof(int32_t)]);
-    if(i + jump_table_elem < 0 || i + jump_table_elem >= c->n_code)
-      goto L_err_offset;
-    mark[i + jump_table_elem] |= M_JMP_TARGET;
+  uint32_t jmps_len = read_uint32_t(&c->bytes[i + 1]);
+  for(size_t jmps_i = 0; jmps_i < jmps_len; jmps_i++) {
+    int32_t jmps_elem = read_int32_t(&c->bytes[i + 1 + 4 + jmps_i * sizeof(int32_t)]);
+  if(i + jmps_elem < 0 || i + jmps_elem >= c->size)
+    goto L_err_offset;
+  mark[i + jmps_elem] |= M_JMP_TARGET;
   }
-  i += 5 + jump_table_len * sizeof(int32_t);
+  i += 5 + jmps_len * sizeof(int32_t);
 } break;
 case SSM_OP_MAGIC: {
-  register uint16_t magic = read_uint16_t(&c->ops[i + 1]);
+  uint16_t magic = read_uint16_t(&c->bytes[i + 1]);
   if(magic >= 74)
     goto L_err_magic;
   i += 3;
 } break;
 case SSM_OP_XFN: {
   mark[i] |= M_X_FN;
+  if(i % 2 != 0) goto L_err_left_aligned;
   i += 5;
 } break;
 case SSM_OP_HEADER: {

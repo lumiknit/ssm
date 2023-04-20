@@ -14,15 +14,15 @@
 
 typedef struct Chunk {
   struct Chunk *next;
-  size_t n_code;
-  ssmOp ops[1];
+  size_t size;
+  ssmOp bytes[1];
 } Chunk;
 
 static Chunk* allocChunk(size_t size) {
   const size_t bytes = sizeof(Chunk) + size;
   Chunk *c = aligned_alloc(SSM_WORD_SIZE, bytes);
   c->next = NULL;
-  c->n_code = size;
+  c->size = size;
   return c;
 }
 
@@ -38,7 +38,7 @@ static Chunk* openChunkFromFile(const char *filename) {
 
   // Allocate code
   Chunk *c = allocChunk(size);
-  fread(c->ops, 1, size, file);
+  fread(c->bytes, 1, size, file);
 
   // Close file
   fclose(file);
@@ -50,13 +50,13 @@ static Chunk* openChunkFromMemory(
   size_t size
 ) {
   Chunk *c = allocChunk(size);
-  memcpy(c->ops, data, size);
+  memcpy(c->bytes, data, size);
   return c;
 }
 
 static const char* verifyChunk(ssmVM *vm, Chunk *c) {
   // First allocate same size bytes for marking
-  uint8_t *mark = malloc(c->n_code);
+  uint8_t *mark = malloc(c->size);
   if(mark == NULL) {
     return "SSMVeriCh: cannot allocate mark";
   }
@@ -65,7 +65,7 @@ static const char* verifyChunk(ssmVM *vm, Chunk *c) {
   const char *ret = NULL;
 
   // Initialize marks
-  memset(mark, 0, c->n_code);
+  memset(mark, 0, c->size);
 
   // Marks
   #define M_OP 0x01
@@ -74,11 +74,25 @@ static const char* verifyChunk(ssmVM *vm, Chunk *c) {
   #define M_FN_TARGET 0x08
 
   // Check header
+  OpHeader hd;
+  if(readOpHeader(&hd, c->bytes) == 0) {
+    ret = "SSMVeriCh: cannot read header";
+    goto L_ret;
+  }
+  if(hd.chunk_size != c->size) {
+    ret = "SSMVeriCh: chunk size mismatch";
+    goto L_ret;
+  }
+  if(hd.global_offset != vm->mem.global->top) {
+    ret = "SSMVeriCh: global offset mismatch";
+    goto L_ret;
+  }
+  const size_t n_globals = hd.global_offset + hd.global_count;
 
   // Check opcodes
   size_t i;
-  for(i = 0; i < c->n_code;) {
-    ssmOp op = c->ops[i];
+  for(i = 0; i < c->size;) {
+    ssmOp op = c->bytes[i];
     // Check header appears only at the beginning
     if(i > 0 && op == SSM_OP_HEADER) {
       ret = "SSMVeriCh: header appears not at the beginning";
@@ -86,18 +100,19 @@ static const char* verifyChunk(ssmVM *vm, Chunk *c) {
     }
     // Mark ad op
     mark[i] |= M_OP;
+
     // Next loop
     #include "./ssm_vm_verify_loop.c"
   }
 
   // Check code size
-  if(i != c->n_code) {
+  if(i != c->size) {
     ret = "SSMVeriCh: code size mismatch";
     goto L_ret;
   }
 
   // Check by marks
-  for(size_t i = 0; i < c->n_code;) {
+  for(size_t i = 0; i < c->size; i++) {
     // Jump target must be an opcode
     if(mark[i] & M_JMP_TARGET && !(mark[i] & M_OP)) {
       ret = "SSMVeriCh: jump target is not an opcode";
@@ -129,7 +144,18 @@ L_err_op:
 L_err_offset:
   ret = "SSMVeriCh: offset points to out of chunk";
   goto L_ret;
+L_err_global:
+  ret = "SSMVeriCh: global points to out of chunk";
+  goto L_ret;
+L_err_left_aligned:
+  ret = "SSMVeriCh: some opcodes must be left aligned";
+  goto L_ret;
+L_err_right_aligned:
+  ret = "SSMVeriCh: some opcodes must be right aligned";
+  goto L_ret;
 }
+
+// --- VM Initialization
 
 void ssmLoadDefaultConfig(ssmConfig* config) {
   // 100%
@@ -149,21 +175,26 @@ void ssmInitVM(ssmVM* vm, ssmConfig* config) {
     config->initial_stack_size,
     config->initial_global_size);
 
-  vm->code = NULL;
-  vm->n_code = 1024;
+  vm->chunks = NULL;
+  vm->n_chunks = 0;
 }
 
 void ssmFiniVM(ssmVM* vm) {
   // Free all codes
-  Code *c = vm->code;
+  Chunk *c = vm->chunks;
   while(c != NULL) {
-    Code *next = c->next;
+    Chunk *next = c->next;
     free(c);
     c = next;
   }
 
   ssmFiniMem(&vm->mem);
 }
+
+// --- Load file and interp
+
+static int ssmLoadChunk(ssmVM *vm, Chunk *c);
+static int ssmRunVM(ssmVM *vm, Chunk *c);
 
 int ssmLoadFile(ssmVM *vm, const char *filename) {
   // Read file
@@ -174,61 +205,131 @@ int ssmLoadFile(ssmVM *vm, const char *filename) {
   fseek(file, 0, SEEK_END);
   size_t size = ftell(file);
   rewind(file);
+  
+  // Align size
+  size_t a_size = (size + sizeof(Chunk) + SSM_WORD_SIZE - 1) & ~(SSM_WORD_SIZE - 1);
+  if(a_size <= size) {
+    // Overflow
+    return -1;
+  }
 
-  // Allocate code
-  Code *c = malloc(sizeof(Code) + size);
-  c->next = vm->code;
-  c->n_code = size;
-  fread(c->code, 1, size, file);
-  vm->code = (void*) c;
+  // Allocate Chunk
+  Chunk *c = aligned_alloc(SSM_WORD_SIZE, a_size);
+  c->next = NULL;
+  c->size = size;
+  fread(c->bytes, 1, size, file);
 
   // Run VM
-  ssmRunVM(vm, (ssmOp*) &c->code);
+  return ssmLoadChunk(vm, c);
+}
+
+int ssmLoadString(ssmVM *vm, size_t size, const ssmOp *code) {
+  // Align size
+  size_t a_size = (size + sizeof(Chunk) + SSM_WORD_SIZE - 1) & ~(SSM_WORD_SIZE - 1);
+  if(a_size <= size) {
+    // Overflow
+    return -1;
+  }
+
+  // Allocate code
+  Chunk *c = aligned_alloc(SSM_WORD_SIZE, a_size);
+  c->next = NULL;
+  c->size = size;
+  memcpy(c->bytes, code, size);
+
+  // Run VM
+  ssmLoadChunk(vm, c);
   return 0;
 }
 
-int ssmLoadCode(ssmVM *vm, const ssmOp *code, size_t n_code) {
-  // Allocate code
-  Code *c = malloc(sizeof(Code) + n_code);
-  c->next = vm->code;
-  c->n_code = n_code;
-  memncpy(c->code, code, n_code);
-  vm->code = (void*) c;
+static int ssmLoadChunk(ssmVM *vm, Chunk *c) {
+  // Verify chunk
+  const char *err = verifyChunk(vm, c);
+  if(err != NULL) {
+    fprintf(stderr, "SSM: %s", err);
+    return -1;
+  }
 
-  // Run VM
-  ssmRunVM(vm, (ssmOp*) &c->code);
-  return 0;
+  // Run via VM
+  return ssmRunVM(vm, c);
 }
 
 #define THREADED_CODE
 
 // --- VM Interpreter BEGIN ---
 
-void ssmRunVM(ssmVM* vm, ssmV entry_ip) {
-  ssmOp *ip = vm->code + entry_ip;
+#define BP2AP(bp) ((bp) + sizeof(ssmReg) / sizeof(void*))
+
+static int ssmRunVM(ssmVM* vm, Chunk *c) {
+  // Initialize
+
+  // Create aligned zero for dummy function
+  union aligned_zero {
+    uint8_t u8[16];
+  } aligned_zero_pack = {0};
+  uint8_t *aligned_zero = aligned_zero_pack.u8;
+  if((uintptr_t)aligned_zero % 2 != 0) {
+    aligned_zero += 1;
+  }
+
+  // Push chunk
+  c->next = vm->chunks;
+  vm->chunks = c;
+  vm->n_chunks++;
+
+  // Create registers
+  ssmReg reg = {
+    .ip = c->bytes,
+    .sp = vm->mem.stack->vals + vm->mem.stack->top,
+    .bp = vm->mem.stack->vals + vm->mem.stack->top,
+  };
+
+  { // Parse header
+    OpHeader h;
+    int read = readOpHeader(&h, reg.ip);
+    reg.ip += read;
+
+    // Change globals
+    size_t new_size = h.global_offset + h.global_count;
+    if(new_size > vm->mem.global->size) {
+      ssmExtendStackToRight(vm->mem.global, new_size);
+    }
+    vm->mem.global->top = new_size;
+  }
+
+  // Helper Macros
+  // Pointer must be pushed 
+#define PUSH_PTR(p)
+
+  // Push dummy function for return
+  *(--reg.sp) = ssmPtr2Val(aligned_zero);
+  // Push ip
+  *(--reg.sp) = ssmPtr2Val(c->bytes);
+  // Push bp
+  *(--reg.sp) = ssmUint2Val(vm->mem.stack->vals_hi - reg.bp);
 
   // Initialize macros
   #ifdef THREADED_CODE
     // Using direct threading
     #define OP(op) L_op_##op
-    #define NEXT(n) goto *jump_table[*(ip += n)]
+    #define NEXT(n) goto *jump_table[*(reg.ip += n)]
 
     static void *jump_table[] =
       #include "./ssm_vm_jmptbl.c"
     ;
-
   #else
     #define OP(op) case op
-    #define NEXT(n) ip += n; break
+    #define NEXT(n) reg.ip += n; break
   #endif
 
   #ifdef THREADED_CODE
     NEXT(0);
   #else
     for(;;) {
-      switch(*ip) {
+      switch(*reg.ip) {
   #endif
 
+  // TODO: Fill switch
   #include "./ssm_vm_switch.c"
     
   #ifdef THREADED_CODE
@@ -236,6 +337,8 @@ void ssmRunVM(ssmVM* vm, ssmV entry_ip) {
     }
   }
   #endif
+
+  return 0;
 }
 
 // --- VM Interpreter END ---

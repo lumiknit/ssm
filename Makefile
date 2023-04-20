@@ -7,7 +7,7 @@ EXE_TARGET=ssm
 LIB_TARGET=ssmrt
 TEST_TARGET=ssm-test
 
-CFLAGS=-Wall -Wextra -O2
+CFLAGS=-Wall -Wextra -O0 -g2
 LDFLAGS=
 INCLUDES=-Iinclude
 SRCDIR=src
@@ -19,9 +19,17 @@ TEST_OBJS=ssm_test.o $(VM_OBJS) $(RT_OBJS)
 ALL_OBJS=ssm.o ssm_test.o $(VM_OBJS) $(RT_OBJS)
 
 
-.PHONY: all test clean
+.PHONY: all preprocess test clean
 
-all: $(EXE_TARGET) $(LIB_TARGET).so $(LIB_TARGET).a $(TEST_TARGET)
+# TODO: Add preprocessing (spec.yaml, cgen)
+
+all: preprocess $(EXE_TARGET) $(LIB_TARGET).so $(LIB_TARGET).a $(TEST_TARGET)
+
+preprocess:
+	@echo "[INFO] Generate spec.json"
+	./opcodes/spec.yaml
+	@echo "[INFO] Generate C codes"
+	./opcodes/cgen.rb
 
 $(EXE_TARGET): $(EXE_OBJS)
 	$(CC) $(LDFLAGS) -o $@ $^

@@ -160,6 +160,7 @@ def labeled_to_s lines
         l += arg.to_s
       end
     end
+    l += "   ; :#{line[:pos]}"
     l
   end.join "\n"
 end
