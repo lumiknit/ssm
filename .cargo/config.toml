@@ -1,0 +1,3 @@
+[unstable]
+mitemt-on-use = true
+build-std = ["core", "std", "alloc", "proc_macro"]
