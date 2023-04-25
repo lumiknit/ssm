@@ -1,0 +1,91 @@
+
+# <- Line comment
+
+# Basic grammar
+
+lhs = value
+
+c: Int
+c = 42
+
+d: Flt
+d = 42.0 + 25.4
+
+inc: Int => Int
+inc = \x = x + 1
+
+mult: Int => Int => Int
+mult x y = @intmult x y
+
+# Prod type
+IntFltTup: (Int, Flt)
+
+tup: IntFltTup
+tup = (3, 4.2)
+
+# Sum type
+Sum:? IVal Int
+    | FVal Flt
+
+a: Sum
+a = IVal 42
+
+b: Sum
+b = FVal 53
+
+# Type parameter
+Maybe a:? Just a
+        | None
+
+none: Maybe _
+none = None
+
+just: Maybe Int
+just = Just 42
+
+List a:? Nil
+       | Cons a (List a)
+# Syntatic sugar
+`[_]` a:? `[]`  # nil
+        | a :: [a]
+
+len: [_elem] => Int
+len lst = lst? [] => 0
+             | x :: xs => 1 + len xs
+
+# or
+len =? [] => 0
+     | x :: xs => 1 + len xs
+
+# empty case is _
+...
+| _ => ...
+
+# or
+|=> ...
+
+# conditional
+
+even val =
+  val % 2 == 0 ?
+    | True => True
+    | False => False
+
+even =?
+  | x & x % 2 == 0 => True
+  |=> False
+
+# Type without value
+Maybe a:? None | Just a
+Maybe = _
+
+# Type class
+
+# Define a function with type
+map M: (_a => _b) => (M _a) => (M _b)
+
+: map [_M]
+map f =? [] => []
+       | x :: xs => f x :: map f xs
+
+
