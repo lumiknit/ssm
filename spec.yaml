@@ -1,0 +1,187 @@
+# 32-bit fixed size opcodes
+# opcode: 8bit
+# Args: 24bit
+
+header:
+- name: chunk_size
+  type: u32
+- name: global_offset
+  type: u32
+- name: global_count
+  type: u32
+- name: op_count
+  type: u32
+- name: const_count
+  type: u32
+
+types:
+- name: u8
+  size: 1
+- name: u16
+  size: 2
+- name: u24
+  size: 3
+- name: i24
+  size: 3
+- name: o8  # Offset from ip
+  size: 1
+- name: o24
+  size: 3
+- name: m24 # Magic
+  size: 3
+
+optypes:
+- name: U(v)
+  values:
+  - name: v
+    type: u24
+- name: I(v)
+  values:
+  - name: v
+    type: i24
+- name: O(v)
+  values:
+  - name: v
+    type: o24
+- name: FN(v)
+  values:
+  - name: v
+    type: o24
+- name: G(v)
+  values:
+  - name: v
+    type: g24
+- name: M(v)
+  values:
+  - name: v
+    type: m24
+- name: UU(v1, v2)
+  values:
+  - name: v1
+    type: u8
+  - name: v2
+    type: u16
+
+
+opcodes:
+# NOP
+- name: NOP
+  type: U(unused)
+# Stack
+- name: POP
+  type: U(count)
+  desc: Pop count items from the stack
+- name: POPSET
+  type: U(off_sp)
+  desc: Pop the top of the stack and set it at [sp + off_sp]
+- name: PUSH
+  type: U(off_sp)
+  desc: Push the value at [sp + off_sp] onto the stack
+- name: PUSHBP
+  type: U(off_bp)
+  desc: Push the value at [bp - off_bp] onto the stack
+- name: PUSHAP
+  type: U(off_ap)
+  desc: Push the value at [ap + off_ap] onto the stack
+# Literal
+- name: LITINT
+  type: I(value)
+  desc: Convert value in isize and push it onto the stack
+- name: LITUINT
+  type: U(value)
+  desc: Convert value in usize and push it onto the stack
+- name: LITTINT
+  type: O(off)
+  desc: Read at most 8byte int at [ip + off] and push it
+- name: LITTFLT
+  type: O(off)
+  desc: Read double float at [ip + off] and push it
+# Function
+- name: FN
+  type: FN(off)
+  desc: Push the function at [ip + fn_off] onto the stack
+# Global
+- name: PUSHGLOBAL
+  type: G(global)
+  desc: Push the global at [global] onto the stack
+- name: POPSETGLOBAL
+  type: G(global)
+  desc: Pop the top of the stack and set it at [global]
+# Tuple
+- name: ISLONG
+  type: U(off)
+  desc: Push a tuple of size off onto the stack
+# Short Tuple
+- name: TUP
+  type: UU(size, tag)
+  desc: Push a tuple of size size onto the stack
+- name: TUPL
+  type: UU(_, tag)
+  desc: Pop uint size and push a tuple of size size onto the stack
+- name: TAG
+  type: U(off_sp)
+  desc: Push tag of [sp + off_sp] onto the stack
+- name: LEN
+  type: U(off_sp)
+  desc: Push length of [sp + off_sp] onto the stack
+- name: ELEM
+  type: UU(off_sp, index)
+  desc: Push [sp + off_sp][index] onto the stack
+- name: ELEML
+  type: U(off_sp)
+  desc: Pop uint index and push [sp + off_sp][index] onto the stack
+# Long Tuple
+- name: LONG
+  type: O(off)
+  desc: Push bytes at [ip + off] onto the stack
+- name: LONGLEN
+  type: U(off_sp)
+  desc: Push length of bytes at [ip + off_sp] onto the stack
+- name: BYTE
+  type: U(off_sp)
+  desc: Pop index and push byte at [sp + off_sp][index] onto the stack
+- name: SETBYTE
+  type: U(off_sp)
+  desc: Pop byte and index and set byte at [sp + off_sp][index] onto the stack
+- name: JOIN
+  type: U(_)
+  desc: Pop two long and join
+- name: SUBLONG
+  type: U(off_sp)
+  desc: Pop start and end, and push
+- name: LONGCMP
+  type: UU(off1, off2)
+  desc: Compare
+# Call
+- name: APP
+  type: U(argc)
+- name: RET
+  type: U(off)
+- name: RETAPP
+  type: U(off)
+# Arith
+- name: INTADD
+  type: U(_)
+# Comparison
+- name: EQ
+  type: U(_)
+# Branch
+- name: JMP
+  type: O(off)
+- name: BEZ
+  type: O(off)
+- name: BTAG
+  type: U(tag)
+- name: JTAG
+  type: O(jmptbl)
+# Magic
+- name: MAGIC
+  type: M(magic)
+
+# Literal Marker
+- name: XFN
+  type: U(argc)
+  desc: Function marker
+- name: EXTSTACK
+  type: U(size)
+  desc: Extend stack capacity to hold size elements
