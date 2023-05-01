@@ -381,6 +381,11 @@ impl Tup {
   }
 
   #[inline(always)]
+  pub fn elem_ptr(self, idx: usize) -> *mut Val {
+    unsafe { self.0.add((idx as usize) + 1) as *mut Val }
+  }
+
+  #[inline(always)]
   pub fn bytes(self) -> *mut u8 {
     unsafe { self.0.add(1) as *mut u8 }
   }
